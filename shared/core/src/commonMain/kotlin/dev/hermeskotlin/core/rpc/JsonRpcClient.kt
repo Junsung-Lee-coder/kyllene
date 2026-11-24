@@ -40,6 +40,11 @@ data class GatewayEvent(
      * payload rather than in it. Null on other gateways and on events outside a turn.
      */
     val executionGeneration: Long? = null,
+    /**
+     * The session authority's `replay_epoch` of the session the event belongs to (gateway/session_events.py), which
+     * its [seq] counts in. Null on the legacy gateway, whose seqs count in `gateway.ready`'s epoch.
+     */
+    val replayEpoch: String? = null,
 )
 
 /**
@@ -294,6 +299,7 @@ class JsonRpcClient(
                 sessionId = params["session_id"]?.jsonPrimitive?.contentOrNull,
                 seq = params["seq"]?.jsonPrimitive?.longOrNull,
                 executionGeneration = (params["execution_generation"] as? JsonPrimitive)?.longOrNull,
+                replayEpoch = (params["replay_epoch"] as? JsonPrimitive)?.contentOrNull,
             ),
         )
     }
