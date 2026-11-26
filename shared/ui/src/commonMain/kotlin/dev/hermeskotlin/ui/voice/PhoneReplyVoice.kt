@@ -11,7 +11,8 @@ import kotlinx.coroutines.launch
 /**
  * Fork (requirements §6): the phone reading aloud a reply the watch asked for, through the same player and route as
  * the phone's own Talk replies ([SpeechPlayer.chainedChatAudio]): earphones that go away stop it, and it never moves
- * on to the phone's speaker. While it reads it has the phone's voice media ([VoiceMedia]), so the wake word doesn't
+ * on to the phone's speaker; picked for its earphones, it plays only if they're still there once that route is open.
+ * While it reads it has the phone's voice media ([VoiceMedia]), so the wake word doesn't
  * listen over it; a call, a voice chat, dictation or Read aloud taking the media stops it.
  */
 class PhoneReplyVoice(private val player: SpeechPlayer) : PhoneReplyOutput {
@@ -19,10 +20,11 @@ class PhoneReplyVoice(private val player: SpeechPlayer) : PhoneReplyOutput {
 
     override fun free(): Boolean = !VoiceMedia.busy.value && !VoiceMedia.busyNow()
 
-    override suspend fun play(next: suspend (index: Int) -> SpokenAudio?): Boolean {
+    override suspend fun play(earphonesOnly: Boolean, next: suspend (index: Int) -> SpokenAudio?): Boolean {
         if (!free()) return false
         val owner = Any()
         VoiceMedia.report(owner, true)
+        var started = true
         try {
             coroutineScope {
                 var reading: Job? = null
@@ -34,6 +36,12 @@ class PhoneReplyVoice(private val player: SpeechPlayer) : PhoneReplyOutput {
                     reading?.cancel()
                 }
                 try {
+                    // Picked for its earphones, which went in the meantime: the route has no private output to
+                    // watch, so the phone's speaker would play it. Nothing plays.
+                    if (earphonesOnly && !player.earphonesConnected()) {
+                        started = false
+                        return@coroutineScope
+                    }
                     if (lost) return@coroutineScope
                     val job = launch {
                         var index = 0
@@ -51,6 +59,6 @@ class PhoneReplyVoice(private val player: SpeechPlayer) : PhoneReplyOutput {
         } finally {
             VoiceMedia.report(owner, false)
         }
-        return true
+        return started
     }
 }

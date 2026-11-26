@@ -35,6 +35,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -68,10 +69,15 @@ class WatchReplyOutputTest {
         val played = mutableListOf<Int>()
         var readings = 0
         var cancelled = 0
+        /** Readings holding the phone's media now: none once each ends, however. */
+        var holding = 0
+        val earphonesOnly = mutableListOf<Boolean>()
         override fun earphones() = earphones
-        override fun free() = free
-        override suspend fun play(next: suspend (Int) -> SpokenAudio?): Boolean {
+        override fun free() = free && holding == 0
+        override suspend fun play(earphonesOnly: Boolean, next: suspend (Int) -> SpokenAudio?): Boolean {
             readings++
+            this.earphonesOnly += earphonesOnly
+            holding++
             try {
                 var index = 0
                 while (true) {
@@ -84,6 +90,8 @@ class WatchReplyOutputTest {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 cancelled++
                 throw e
+            } finally {
+                holding--
             }
             return true
         }
@@ -151,6 +159,7 @@ class WatchReplyOutputTest {
 
     private fun JsonObject.speech() = this["speech"]?.jsonPrimitive?.content ?: "Off"
     private fun JsonObject.phase() = this["phase"]?.jsonPrimitive?.content
+    private fun JsonObject.earphonesOnly() = this["earphonesOnly"]?.jsonPrimitive?.content == "true"
 
     private fun ask(id: String, earphones: Boolean? = false) =
         WatchAsk(id, "remind me", "ordinary", speak = true, scope = WatchScope(FakeGateway.URL.value), earphones = earphones)
@@ -302,5 +311,114 @@ class WatchReplyOutputTest {
         assertTrue(s.outbox.clips.isEmpty(), "never moved on to the watch")
         assertTrue(s.updates("lost").none { it.speech() == "Unavailable" })
         assertEquals(1, s.speakRequests.size)
+    }
+
+    // Repair (review B1): the phone's reading is the turn's: a new ask, Stop and later text all end it.
+
+    private val long = (1..40).joinToString(" ") { "Sentence number $it is here." }
+
+    @Test
+    fun aNewWatchAskMidReadingStopsTheOldOneAndOnlyTheNewIsRead() = runTest {
+        val s = setup()
+        s.phone.earphones = true
+        s.replyText = long
+        s.phone.holdPlay = CompletableDeferred()
+        s.relay.ask("watch", ask("first"))
+        until { s.phone.played.isNotEmpty() }
+        // A new spoken ask while the first reply is read: the reading stops at once, mid-clip, and lets the media go.
+        s.replyText = "New."
+        s.relay.ask("watch", ask("second"))
+        until { s.phone.cancelled == 1 }
+        s.phone.holdPlay!!.complete(Unit)
+        s.done("second")
+        // Read on the phone again: the old reading let the media go (a reading still holding it would send this
+        // reply to the watch instead).
+        until { s.phone.readings == 2 && s.phone.holding == 0 }
+        // The old reply's first clip only, then the new reply's own; nothing ever to the watch.
+        assertEquals(listOf(0, 0), s.phone.played)
+        assertTrue(s.outbox.clips.isEmpty())
+        // Text later stops the new reading's voice too: its listener is the current one.
+        s.gate.textInput(FakeGateway.URL)
+        delay(200)
+        assertEquals(0, s.phone.holding)
+    }
+
+    @Test
+    fun theWatchsStopMidReadingStopsItAndLaterTextFindsNothingToStop() = runTest {
+        val s = setup()
+        s.phone.earphones = true
+        s.replyText = long
+        s.phone.holdPlay = CompletableDeferred()
+        s.relay.ask("watch", ask("st"))
+        until { s.phone.played.isNotEmpty() }
+        s.relay.stop("st")
+        until { s.phone.cancelled == 1 }
+        assertEquals(0, s.phone.holding, "the media is let go")
+        s.phone.holdPlay!!.complete(Unit)
+        delay(200)
+        assertEquals(listOf(0), s.phone.played, "no clip after Stop")
+        s.gate.textInput(FakeGateway.URL)
+        delay(200)
+        assertEquals(1, s.phone.cancelled)
+        assertEquals(listOf(0), s.phone.played)
+        assertTrue(s.outbox.clips.isEmpty())
+    }
+
+    @Test
+    fun textAfterASecondAskStopsTheSecondReading() = runTest {
+        val s = setup()
+        s.phone.earphones = true
+        s.relay.ask("watch", ask("one"))
+        s.done("one")
+        until { s.phone.readings == 1 && s.phone.holding == 0 }
+        s.replyText = long
+        s.phone.holdPlay = CompletableDeferred()
+        s.relay.ask("watch", ask("two"))
+        until { s.phone.readings == 2 && s.phone.played.size == 2 }
+        s.gate.textInput(FakeGateway.URL)
+        until { s.phone.cancelled == 1 }
+        assertEquals(0, s.phone.holding)
+        s.phone.holdPlay!!.complete(Unit)
+        delay(200)
+        assertEquals(2, s.phone.played.size)
+    }
+
+    // Repair (privacy): a device picked for its earphones plays only through earphones still there.
+
+    @Test
+    fun thePhonePickedForItsEarphonesSaysSoWhenItReads() = runTest {
+        val s = setup()
+        s.phone.earphones = true
+        s.relay.ask("watch", ask("pe"))
+        s.done("pe")
+        until { s.phone.readings == 1 }
+        assertEquals(listOf(true), s.phone.earphonesOnly)
+        // Picked with no earphones anywhere (the latest voice request was on the phone): its speaker may play it.
+        s.phone.earphones = false
+        s.beforeReply = { s.gate.voiceInput(FakeGateway.URL, VoiceDevice.Phone) }
+        s.relay.ask("watch", ask("none"))
+        s.done("none")
+        until { s.phone.readings == 2 }
+        assertEquals(listOf(true, false), s.phone.earphonesOnly)
+    }
+
+    @Test
+    fun theWatchPickedForItsEarphonesIsToldSo() = runTest {
+        val s = setup()
+        s.relay.ask("watch", ask("we", earphones = true))
+        s.done("we")
+        assertTrue(s.updates("we").last { it.phase() == "Done" }.earphonesOnly())
+        // None anywhere, or on both: not for earphones, as before.
+        s.relay.ask("watch", ask("wn", earphones = false))
+        s.done("wn")
+        assertFalse(s.updates("wn").last { it.phase() == "Done" }.earphonesOnly())
+        s.phone.earphones = true
+        s.relay.ask("watch", ask("wb", earphones = true))
+        s.done("wb")
+        assertFalse(s.updates("wb").last { it.phase() == "Done" }.earphonesOnly())
+        // A reply read on the phone doesn't tell the watch to need anything.
+        s.relay.ask("watch", ask("wp", earphones = false))
+        s.done("wp")
+        assertFalse(s.updates("wp").last { it.phase() == "Done" }.earphonesOnly())
     }
 }

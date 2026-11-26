@@ -267,6 +267,11 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      media (a call, a voice chat, dictation, Read aloud), else on the watch as before; earphones that go away stop it
      and nothing more plays, never on to the phone's speaker. Text stops it at once. The watch says with each ask
      whether earphones are connected to it (`WatchAsk.earphones`); an older watch doesn't, and keeps its voice.
+     - The reading on the phone is part of the watch's turn: a new watch ask or the watch's Stop ends it at once, as
+       text does, and it lets the phone's media go.
+     - A device picked for its earphones plays the reply only through earphones still there: the phone checks once
+       its route is open, the watch before every clip and its own voice (`ReplyUpdate.earphonesOnly`; before that
+       update, whether the watch asked with earphones on). Gone, nothing plays anywhere; never on a speaker.
      - Earphones on both devices: no order is agreed for that yet, so the reply stays where it was asked, as before.
      - The watch's earbuds going away mid-reply silence it there (`SpeechOut`, on `ACTION_AUDIO_BECOMING_NOISY`, as
        Android's [output guide](https://developer.android.com/media/platform/output) describes), and the phone stops
@@ -280,8 +285,9 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
        `SpeechOut` (`earphones`, `onOutputLost`) and `WatchLink.ask`.
      - Tests: `core/custom/ReplyOutputTest.kt`, `core/wear/WatchReplyOutputTest.kt` (the real relay and gate: phone
        earphones, watch earphones, both, the latest voice request, another account's, an older watch, a busy phone,
-       text before and during the reading, an account switch, lost earphones), `ui/voice/PhoneReplyVoiceTest.kt` and
-       `wearApp/.../SpeechOutEarphonesTest.kt`.
+       text before and during the reading, an account switch, lost earphones, a new ask, Stop and later text mid-reading,
+       and why a device was picked), `ui/voice/PhoneReplyVoiceTest.kt` (earphones gone before the route opens, a
+       reading cancelled mid-clip), `wearApp/.../SpeechOutEarphonesTest.kt` and `ReplyEarphonesTest.kt`.
    - Read aloud, pressed by hand, is never silenced. The assistant panel's voice is dictation only and reads nothing
      aloud. In memory only: a reply can't outlive the app's process.
    - Code: `core/custom/SpeechGate.kt` (with `typed`), its `CoreModule` single; `VoiceController` (tickets, `mayRead`,

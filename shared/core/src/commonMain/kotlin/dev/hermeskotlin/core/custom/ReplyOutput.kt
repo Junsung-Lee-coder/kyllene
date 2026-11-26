@@ -38,7 +38,9 @@ interface PhoneReplyOutput {
     /**
      * Plays the reply's clips in turn as [next] makes them (null: no more), through the phone's usual voice route.
      * Stops at once, and plays nothing more, when the earphones it plays through go away (never on to the phone's
-     * speaker) or another voice takes the media; cancelling stops it too. False when nothing could start.
+     * speaker) or another voice takes the media; cancelling stops it too. [earphonesOnly]: the phone was picked for
+     * its earphones, so with none connected once the route is open, nothing plays at all. False when nothing could
+     * start.
      */
-    suspend fun play(next: suspend (index: Int) -> SpokenAudio?): Boolean
+    suspend fun play(earphonesOnly: Boolean, next: suspend (index: Int) -> SpokenAudio?): Boolean
 }

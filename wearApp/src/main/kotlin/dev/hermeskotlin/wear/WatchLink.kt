@@ -283,6 +283,16 @@ class WatchLink(
         speech.onOutputLost = ::quiet
     }
 
+    /** Fork (requirements §6): the last ask, when it was made with earphones connected here. */
+    @Volatile private var askedWithEarphones: String? = null
+
+    /**
+     * Fork (requirements §6): a reply's voice that came here for the watch's earphones, which have gone since: it's
+     * silenced, here and on the phone, never played on the watch's speaker.
+     */
+    private fun earphonesGone(askId: String): Boolean =
+        replyNeedsEarphones(_turn.value, askId, askedWithEarphones) && !speech.earphones()
+
     /**
      * Sends what was said or typed; with [audio] (a recording's file), the phone has the gateway transcribe it first.
      * The file is streamed to the phone and deleted once sent, or once the ask goes no further.
@@ -292,7 +302,9 @@ class WatchLink(
         dismissCall()
         val id = UUID.randomUUID().toString()
         val chat = store.chat.value
-        val ask = WatchAsk(id, text.orEmpty().trim(), chat.id, speak = store.speak.value && speech.canPlay(), audioType = audioType, botProfile = chat.botProfile, scope = chat.scope, newChat = chat.newChat, earphones = speech.earphones())
+        val earphones = speech.earphones()
+        askedWithEarphones = id.takeIf { earphones }
+        val ask = WatchAsk(id, text.orEmpty().trim(), chat.id, speak = store.speak.value && speech.canPlay(), audioType = audioType, botProfile = chat.botProfile, scope = chat.scope, newChat = chat.newChat, earphones = earphones)
         _turn.value = WatchTurn(id, text?.trim(), ReplyUpdate(id, if (audio != null) ReplyPhase.Transcribing else ReplyPhase.Sending, chatId = chat.id, title = chat.title))
         if (chat.botProfile != null && !botChats) {
             audio?.delete()
@@ -727,7 +739,9 @@ class WatchLink(
         val now = _turn.value ?: return
         if (clip.askId != now.askId || clip.askId == silenced || !store.speak.value) return
         scope.launch(main) {
-            if ((sourceNode == null || sourceNode == phoneNode) && _turn.value?.askId == clip.askId && clip.askId != silenced) speech.clip(clip.askId, clip.index, clip.count, clip.mimeType, bytes)
+            if ((sourceNode == null || sourceNode == phoneNode) && _turn.value?.askId == clip.askId && clip.askId != silenced) {
+                if (earphonesGone(clip.askId)) quiet() else speech.clip(clip.askId, clip.index, clip.count, clip.mimeType, bytes)
+            }
         }
     }
 
@@ -759,7 +773,9 @@ class WatchLink(
                 TileService.getUpdater(context).requestUpdate(AskTileService::class.java)
             }
             if (update.speech == ReplySpeech.Unavailable && update.askId != silenced && store.speak.value && update.text.isNotBlank()) {
-                if (_turn.value?.askId == update.askId) speech.say(update.askId, spokenText(update.text))
+                if (_turn.value?.askId == update.askId) {
+                    if (earphonesGone(update.askId)) scope.launch(main) { quiet() } else speech.say(update.askId, spokenText(update.text))
+                }
             }
         }
     }
@@ -866,3 +882,13 @@ internal fun spokenText(markdown: String): String = markdown
     .replace(Regex("[*_~>#|]"), "")
     .replace(Regex("""\s+"""), " ")
     .trim()
+
+/**
+ * Fork (requirements §6): whether the reply to [askId] may be voiced here only through the watch's earphones: the
+ * phone said so with the reply ([ReplyUpdate.earphonesOnly]); before that update arrives (its clips come another way),
+ * whether the watch asked with earphones on ([askedWithEarphones]), so a clip never goes to the speaker meanwhile.
+ */
+internal fun replyNeedsEarphones(turn: WatchTurn?, askId: String, askedWithEarphones: String?): Boolean {
+    if (turn == null || turn.askId != askId) return false
+    return if (turn.update.phase == ReplyPhase.Done) turn.update.earphonesOnly else askedWithEarphones == askId
+}

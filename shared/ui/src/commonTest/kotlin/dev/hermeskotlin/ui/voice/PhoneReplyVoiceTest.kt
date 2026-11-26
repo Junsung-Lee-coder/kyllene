@@ -53,7 +53,7 @@ class PhoneReplyVoiceTest {
         val voice = PhoneReplyVoice(player)
         assertTrue(voice.earphones())
         assertTrue(voice.free())
-        assertTrue(voice.play { i -> if (i < 3) clip(i) else null })
+        assertTrue(voice.play(earphonesOnly = true) { i -> if (i < 3) clip(i) else null })
         assertEquals(listOf("clip-0", "clip-1", "clip-2"), player.played)
         assertEquals(1, player.routes)
         assertEquals(1, player.closed)
@@ -65,7 +65,7 @@ class PhoneReplyVoiceTest {
         val player = Player()
         val voice = PhoneReplyVoice(player)
         var asked = 0
-        val reading = async { voice.play { i -> asked++; clip(i) } }
+        val reading = async { voice.play(earphonesOnly = false) { i -> asked++; clip(i) } }
         runCurrent()
         assertEquals(listOf("clip-0"), player.played)
         assertTrue(VoiceMedia.busy.value, "the reading has the media")
@@ -83,7 +83,7 @@ class PhoneReplyVoiceTest {
         val voice = PhoneReplyVoice(player)
         VoiceMedia.report(other, true)
         assertFalse(voice.free())
-        assertFalse(voice.play { clip(it) })
+        assertFalse(voice.play(earphonesOnly = false) { clip(it) })
         assertTrue(player.played.isEmpty())
         assertEquals(0, player.routes)
     }
@@ -92,7 +92,7 @@ class PhoneReplyVoiceTest {
     fun anotherVoiceTakingTheMediaStopsIt() = runTest {
         val player = Player()
         val voice = PhoneReplyVoice(player)
-        val reading = async { voice.play { i -> clip(i) } }
+        val reading = async { voice.play(earphonesOnly = false) { i -> clip(i) } }
         runCurrent()
         assertEquals(1, player.played.size)
         VoiceMedia.report(other, true)
@@ -100,5 +100,45 @@ class PhoneReplyVoiceTest {
         assertTrue(reading.await())
         assertEquals(1, player.played.size)
         assertEquals(1, player.closed)
+    }
+
+    // Repair (privacy): picked for its earphones, the phone checks they're still there once the route is open.
+
+    @Test
+    fun earphonesGoneBeforeTheRouteOpensPlayNothingAnywhere() = runTest {
+        // Picked while they were connected; gone by the time the reading opens the route.
+        val player = Player().apply { earphones = false; playing.complete(Unit) }
+        val voice = PhoneReplyVoice(player)
+        var asked = 0
+        assertFalse(voice.play(earphonesOnly = true) { i -> asked++; clip(i) })
+        assertTrue(player.played.isEmpty(), "never on the phone's speaker")
+        assertEquals(0, asked, "no clip made")
+        assertEquals(1, player.closed, "the route let go")
+        assertFalse(VoiceMedia.busy.value)
+    }
+
+    @Test
+    fun pickedWithNoEarphonesAnywhereItsSpeakerReadsIt() = runTest {
+        val player = Player().apply { earphones = false; playing.complete(Unit) }
+        assertTrue(PhoneReplyVoice(player).play(earphonesOnly = false) { i -> if (i < 1) clip(i) else null })
+        assertEquals(listOf("clip-0"), player.played)
+    }
+
+    // Repair (review B1): cancelled as its turn is (a new watch ask, the watch's Stop), it lets everything go.
+
+    @Test
+    fun cancelledMidClipItLetsTheRouteAndTheMediaGo() = runTest {
+        val player = Player().apply { earphones = true }
+        val voice = PhoneReplyVoice(player)
+        var asked = 0
+        val reading = async { voice.play(earphonesOnly = true) { i -> asked++; clip(i) } }
+        runCurrent()
+        assertTrue(VoiceMedia.busy.value)
+        reading.cancel()
+        runCurrent()
+        assertEquals(1, asked)
+        assertEquals(1, player.closed)
+        assertFalse(VoiceMedia.busy.value)
+        assertTrue(voice.free(), "the next reply may be read here")
     }
 }

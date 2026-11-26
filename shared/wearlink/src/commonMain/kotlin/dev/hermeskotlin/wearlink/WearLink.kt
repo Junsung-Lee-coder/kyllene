@@ -260,6 +260,11 @@ data class ReplyUpdate(
     /** How full the model's context window is, 0–100, once the gateway has said. */
     val contextPercent: Int? = null,
     val scope: WatchScope? = null,
+    /**
+     * Fork (requirements §6): the reply's voice came to the watch because only the watch had earphones: it plays only
+     * while the watch still does, never on its speaker. Left out when false, so either side may be older.
+     */
+    val earphonesOnly: Boolean = false,
 )
 
 /** One of the recent chats, for picking which one the watch talks in. [activityAt] is in epoch seconds. */
