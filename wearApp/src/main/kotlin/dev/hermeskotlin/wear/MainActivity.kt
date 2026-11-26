@@ -1,5 +1,6 @@
 package dev.hermeskotlin.wear
 
+import dev.hermeskotlin.wearlink.WakeEndSilence
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -112,6 +113,8 @@ class MainActivity : ComponentActivity() {
                 listening.value = Listening()
             }
         }
+        // Fork: the wake word doesn't listen while this screen records.
+        lifecycleScope.launch { listening.collect { app.wake.appRecording.value = it.recording } }
         // A call keeps the screen on: with it off, the activity stops, and the call with it.
         lifecycleScope.launch {
             app.link.call.collect { call ->
@@ -132,6 +135,36 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         app.callDisplay.refresh()
+    }
+
+    // Fork (requirements §5): the wake word's window each time this screen comes on, and its start here while it shows.
+    override fun onResume() {
+        super.onResume()
+        app.wake.inApp = ::wakeStart
+        app.wake.appShown()
+    }
+
+    override fun onPause() {
+        app.wake.inApp = null
+        app.wake.appHidden()
+        super.onPause()
+    }
+
+    /** Fork: the wake word was heard on this screen: a call as Talk would with Talk live on, else one request recorded. */
+    private fun wakeStart() {
+        if (recordingJob?.isActive == true || recognitionGeneration != null || app.link.call.value?.active == true) return
+        if (app.link.liveVoice.value && app.store.live.value) return call()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        val generation = app.link.profileReset.value
+        val endpoint = WatchRecorder.Endpoint.wake(WakeEndSilence.clamp(app.store.wake.value.endSilenceMs))
+        app.link.quiet()
+        listening.value = Listening(recording = true)
+        @Suppress("MissingPermission") // checked above.
+        recordingJob = lifecycleScope.launch {
+            recordAsk(listening, generation, { app.link.profileReset.value }, { onLevel -> recorder.record(endpoint, onLevel) }) { audio ->
+                app.link.ask(null, audio, WatchRecorder.MIME_TYPE)
+            }
+        }
     }
 
     private val notificationsAllowed = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}

@@ -171,4 +171,7 @@
     <string name="phone_place_not_accepted">nem fogadták el</string>
     <string name="phone_place_no_reach">A Kyllene nem érte el a Gateway-t</string>
     <string name="phone_place_refused">a Gateway elutasította</string>
+    <string name="notification_wake_title">Figyel az ébresztőszavadra</string>
+    <string name="notification_wake_text">Mondd ki a Hermes indításához. A Leállítás kikapcsolja a figyelést.</string>
+    <string name="notification_wake_stop">Leállítás</string>
 </resources>

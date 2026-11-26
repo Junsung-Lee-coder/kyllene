@@ -794,6 +794,8 @@ internal fun SettingsView(
                     }
                 }
 
+                // Fork (requirements §5): the phone's and the watch's wake word.
+                if (hasVoice && !isDesktop) WakeWordSettings(settings, onUpdate)
                 if (isDesktop) Section(stringResource(Res.string.settings_section_desktop)) {
                     SwitchRow(
                         title = stringResource(Res.string.settings_keep_running),
@@ -1360,7 +1362,7 @@ private fun CallTargetRow(target: CallTarget, faces: BotFaces, onClick: () -> Un
 
 /** A label with its control underneath, for controls too wide to sit at the end of a row. */
 @Composable
-private fun Field(title: String, detail: String? = null, control: @Composable () -> Unit) {
+internal fun Field(title: String, detail: String? = null, control: @Composable () -> Unit) {
     if (!settingShown(title, detail)) return
     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

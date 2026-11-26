@@ -105,4 +105,31 @@
         <item quantity="many">L'appel en direct s'est terminé après %1$d de secondes de silence.</item>
         <item quantity="other">L'appel en direct s'est terminé après %1$d secondes de silence.</item>
     </plurals>
+    <string name="settings_section_wake">Mot d'activation</string>
+    <string name="settings_phone_wake">Mot d'activation sur le téléphone</string>
+    <string name="settings_phone_wake_detail">Dites un mot d'activation pour commencer : un appel en direct si Phone Live est activé, sinon une demande.</string>
+    <string name="settings_watch_wake">Mot d'activation sur la montre</string>
+    <string name="settings_watch_wake_detail">La même chose sur votre montre.</string>
+    <string name="settings_wake_phrases">Mots d'activation</string>
+    <string name="settings_wake_phrases_detail">Jusqu'à 24, séparés par des espaces : 40 caractères chacun, 240 en tout. * remplace des caractères dans un mot. Vide utilise ceux par défaut.</string>
+    <string name="settings_wake_save">Enregistrer</string>
+    <string name="settings_wake_end">Fin de la demande</string>
+    <string name="settings_wake_end_detail">0,5–10 par pas de 0,5. Demandes par mot d'activation seulement.</string>
+    <string name="settings_wake_seconds">%1$s secondes</string>
+    <string name="settings_wake_start">Commencer l'écoute</string>
+    <string name="settings_wake_stop">Arrêter l'écoute</string>
+    <string name="settings_wake_state_stopped">Arrêtée</string>
+    <string name="settings_wake_state_listening">Écoute hors de l'app</string>
+    <string name="settings_wake_state_in_app">Écoute dans l'app</string>
+    <string name="settings_wake_state_no_on_device">Ce téléphone n'a pas de reconnaissance vocale sur l'appareil : il ne peut pas écouter hors de l'app.</string>
+    <string name="settings_wake_state_no_microphone">Autorisez le micro pour écouter.</string>
+    <string name="settings_wake_state_refused">Android n'a pas laissé l'écoute démarrer. Réessayez avec Kyllene ouvert.</string>
+    <string name="settings_wake_phone_listening">Écoute sur le téléphone</string>
+    <string name="settings_wake_watch_listening">Écoute sur la montre</string>
+    <string name="settings_wake_outside">Hors de l'app</string>
+    <string name="settings_wake_screen_off">Écran éteint</string>
+    <string name="settings_wake_charging">Pendant la charge</string>
+    <string name="settings_wake_phone_note">Sur l'appareil uniquement. Fenêtres de 30 secondes, puis une minute de pause, qu'Android peut allonger quand le téléphone est inactif.</string>
+    <string name="settings_wake_watch_note">Ouvrez l'app de la montre pour commencer l'écoute.</string>
+    <string name="settings_wake_notification_note">L'écoute en arrière-plan affiche une notification avec Arrêter.</string>
 </resources>

@@ -6,6 +6,9 @@
 
     <!-- When the watch has no speech recognizer of its own, it records and the gateway transcribes. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Fork (requirements §5): the wake word outside the app, in a microphone service started with the app on screen. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <!-- A live voice call goes from the watch straight to the voice model, over Wi-Fi or mobile data when there is
          some (it asks for them), the call's audio routed as a call. -->
@@ -33,6 +36,10 @@
         </intent>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <!-- Fork: the wake word picks the watch's recognition service, never this app's own. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 
@@ -83,6 +90,11 @@
             android:exported="false" />
 
         <!-- Herald on the phone answers here: the turn's updates, the chats, its status, and the reply's voice. -->
+        <service
+            android:name=".WatchWakeService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <service
             android:name=".WatchListenerService"
             android:exported="true">

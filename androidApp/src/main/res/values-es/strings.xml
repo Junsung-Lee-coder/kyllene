@@ -173,4 +173,7 @@
     <string name="phone_place_not_accepted">no se aceptó</string>
     <string name="phone_place_no_reach">Kyllene no pudo llegar al Gateway</string>
     <string name="phone_place_refused">el Gateway lo rechazó</string>
+    <string name="notification_wake_title">Escuchando tu palabra de activación</string>
+    <string name="notification_wake_text">Dila para iniciar Hermes. Detener apaga la escucha.</string>
+    <string name="notification_wake_stop">Detener</string>
 </resources>

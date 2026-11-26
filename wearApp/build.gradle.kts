@@ -97,6 +97,8 @@ dependencies {
     // Fork: the orb reads its screen's lifecycle (OrbMotion).
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.wear.tiles)
+    // Fork: the wake word's listening as an ongoing activity on the watch face.
+    implementation(libs.wear.ongoing)
     // The tile answers with a ListenableFuture.
     implementation(libs.androidx.concurrent.futures)
     implementation(libs.wear.protolayout)

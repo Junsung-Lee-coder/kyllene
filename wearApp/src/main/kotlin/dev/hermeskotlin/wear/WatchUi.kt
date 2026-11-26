@@ -268,6 +268,10 @@ private fun TalkScreen(
     val replyPlaying by speech.sounding.collectAsState()
     val mic by listening.collectAsState()
     val callState by link.call.collectAsState()
+    val wake = HeraldWatch.of(LocalContext.current).wake
+    val wakeListening by wake.listening.collectAsState()
+    val wakeSettings by store.wake.collectAsState()
+    val wakePhrase = dev.hermeskotlin.wearlink.WakePhrases.parse(wakeSettings.phrases).first()
     val listState = rememberTransformingLazyColumnState()
     val current = turn
     val call = callState
@@ -333,6 +337,8 @@ private fun TalkScreen(
             }
             item { ChatTitle(chatTitle, onChats) }
             item { Caption(captionLine, mood) }
+            // Fork (requirements §5): while the wake word's recognizer listens, what to say.
+            if (wakeListening && call == null && current?.running != true && !mic.recording) item { WakeHint(wakePhrase) }
             val micError = mic.error
             if (micError != null) item { Notice(micError.text(), onClick = onDismissListeningError) }
             if (call == null && current != null && !mic.recording) {
@@ -873,6 +879,8 @@ private fun SettingsScreen(link: WatchLink, store: WatchStore) {
             item { VoiceSwitch(stringResource(R.string.wear_read_aloud), stringResource(R.string.wear_read_aloud_detail), speak, store::setSpeak) }
             // Fork: what the reader saved here, and deleting it (requirements §9.2).
             item { SavedRow(link) }
+            // Fork (requirements §5): the wake word as it stands here, and Stop while it listens outside the app.
+            item { WakeRow() }
             // Not a switch: the system's picker decides it, and it can be taken away there too.
             if (canBeAssistant && assistantRequest != null) {
                 item {
@@ -1158,5 +1166,52 @@ private fun MessageScreen(link: WatchLink, messageId: String) {
                 }
             }
         }
+    }
+}
+
+/** Fork (requirements §5): "Say “루미”" under the orb, with a microphone, while the wake word's recognizer listens. */
+@Composable
+private fun WakeHint(phrase: String) {
+    Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Icon(painterResource(R.drawable.ic_mic), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+        Text("  " + stringResource(R.string.wear_wake_say, phrase), style = geist(14, color = Muted))
+    }
+}
+
+/** Fork: the wake word's actual state on this watch; Stop listening while it listens outside the app. */
+@Composable
+private fun WakeRow() {
+    val wake = HeraldWatch.of(LocalContext.current).wake
+    val state by wake.state.collectAsState()
+    val running by wake.serviceRunning.collectAsState()
+    // A status, not a control: nothing happens on a tap.
+    Column(
+        Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(26.dp)).background(Surface2).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(stringResource(R.string.wear_wake_title), style = geist(14, FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            stringResource(
+                when (state) {
+                    WatchWakeState.Off -> R.string.wear_wake_state_off
+                    WatchWakeState.InApp -> R.string.wear_wake_state_in_app
+                    WatchWakeState.Outside -> R.string.wear_wake_listening
+                    WatchWakeState.NoRecognizer -> R.string.wear_wake_state_no_recognizer
+                    WatchWakeState.NoMicrophone -> R.string.wear_wake_state_no_microphone
+                },
+            ),
+            style = geist(12, color = Text2),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    if (running) {
+        Button(
+            onClick = wake::stopService,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Surface2, contentColor = Text1),
+            icon = { Icon(painterResource(R.drawable.ic_close), contentDescription = null, tint = Text1) },
+            label = { Text(stringResource(R.string.wear_wake_stop), style = geist(14, FontWeight.Medium), maxLines = 1) },
+        )
     }
 }

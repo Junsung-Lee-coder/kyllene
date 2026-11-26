@@ -361,7 +361,72 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
 
       Not tested on a device: how the levels behave with real microphones, rooms and networks.
 
-The fork adds two switches and the two Live silence settings to Settings › Voice, and the Ready state to the voice panel; it doesn't otherwise change
+11. **A wake word on the phone and the watch.**
+    - **Settings › Wake word (phone).**
+      - Phone wake word and Watch wake word, both off by default.
+      - The phrases: up to 24 phrases, 40 characters each, 240 in all; `*` matches inside a word. An empty field
+        shows and uses the whole default list `루미 루미야 룸이 룸이야 루미봇 룸이봇 룸미 룸미야 룸미봇`.
+      - End of request: 0.5–10 s in 0.5 steps, 2.0 by default. It applies to wake-started requests only.
+      - Start listening (or Stop listening while it runs), with a status that says what the phone is actually doing.
+      - Phone listening and Watch listening: Outside the app, Screen off, While charging, all off by default.
+    - **What a phrase does.**
+      - It counts only at the start of what was said, or after one greeting (hey, hi, hello, ok, okay, 안녕, 저기).
+      - It starts that device's voice, as its button does: a live call with Live on, else one request. That request
+        ends on the setting's quiet spell; nothing is sent if nothing is said within 8 s.
+      - It is a start only: words said after it aren't taken as the request, and the sentence isn't kept.
+      - After the reply the chat waits at Ready, as Talk does. The next request needs the wake word again or a button.
+      - Manual Talk isn't changed.
+    - **When it listens.** Only while every voice on that device is idle (no recording, call, dictation or reply
+      playing), and 4 s after one ends.
+    - **One utterance, one request.** The phone answers a claim from each device: the first in 10 s wins
+      (`WakeClaims`, `/herald/wake/claim`). A watch with an older phone starts on its own. A newer phone's silence
+      means no, and nothing is sent again.
+    - **Phone.**
+      - In the app: a 5 s window each time a chat comes on screen. Heard, that chat's voice starts
+        (`VoiceButton.wake`).
+      - Out of the app: only after Start listening is tapped (a microphone foreground service, which Android allows
+        only with the app on screen; never at boot or by itself). The on-device recognizer alone, 30 s windows, then
+        60 s of rest (Android may stretch it while the phone is idle).
+      - A phone without an on-device recognizer can't listen out of the app, and Settings says so.
+      - Heard out of the app, a chat starts with no screen (`WakeVoice`), in the Default Call Target conversation, as
+        Call Hermes does.
+      - Stop (in the notification or Settings) ends listening, and a chat it started.
+    - **Watch.**
+      - A 5 s window each time the screen actually turns on with the app showing.
+      - Outside the app (that option), from the next time its app is opened: a microphone service shown as an
+        ongoing activity with Stop. It gives the same window on each screen-on, and keeps listening while the screen
+        is off or while charging, by those options.
+      - Its ordinary recognizer listens, never Kyllene's own. Sessions are renewed in turn, and failures back off to a
+        minute.
+      - The Talk screen shows "Say “루미”" while the recognizer is ready.
+      - Its Settings show the state, and Stop listening while it runs.
+      - The phone sends the watch's settings in `PhoneStatus.wake`. A status without them changes nothing on the
+        watch, and the watch keeps the last ones.
+    - **Not used.** The low-power hotword APIs (`AlwaysOnHotwordDetector`) need privileged permissions an installed
+      app can't hold.
+    - **Not tested on a device:** whether each device's recognizer hears the phrases, and how listening affects the
+      battery.
+    - **Code:**
+      - `shared/wearlink/.../WakeWord.kt` (phrases, limits, rules, claims, the loop) and `AndroidWakeRecognizer.kt`;
+      - `AppSettings` (ten fields), `WatchRelay` (status, claims), `WatchAccentSync` (pushes the watch's settings);
+      - `ui/voice/PhoneWake.kt` (`VoiceMedia`, status), `VoiceController.armWake`, `VoiceButton.wake`;
+      - `ui/settings/WakeWordSettings.kt`;
+      - `androidApp/.../wake/` (`PhoneWakeController`, `PhoneWakeService`, `WakeVoice`);
+      - `wearApp/.../WatchWake.kt`, `WatchWakeService.kt`, `WatchRecorder.Endpoint`, `WatchStore.wake`, and the Talk and
+        Settings rows;
+      - both manifests (the watch's `RecognitionService` query); `androidx.wear:wear-ongoing`;
+      - strings in every language.
+    - **Tests:**
+      - `wearlink/WakeWordTest.kt` (defaults, limits, start-only matching, endpoint values, the rules, claims, the
+        wire, the loop on a fake recognizer: cancelled at once on a match, ready only when real, renewals without
+        spinning, no recognizer);
+      - `core/wear/WatchWakeRelayTest.kt`;
+      - `ui/voice/WakeTalkTest.kt` (the real controller: only the wake-started request ends on its quiet spell, Ready
+        after, Talk unchanged);
+      - `wearApp/.../WatchWakeTest.kt` (the real recognizer adapter on Robolectric's SpeechRecognizer, the recognizer
+        choice, stored settings, endpoints).
+
+The fork adds two switches and the two Live silence settings to Settings › Voice, a Wake word section and its two listening sections, and the Ready state to the voice panel; it doesn't otherwise change
 the settings screens or layout. The watch app changes only as described above, the reader and its settings row
 included.
 
@@ -423,6 +488,9 @@ For each conflict or failing test:
 - **Live silence.** Keep `silenceSeconds` passed to every phone `LiveConversation` and the poll's `LiveSilence.sample`,
   `start()` on `session.started`, and the watch's `WatchSilence` in `WatchLink`'s call poll. If upstream adds its own
   idle ending, compare before dropping this; the server's `idle_timeout_s` only pauses the session and isn't a hang-up.
+- **Wake word.** Keep `VoiceButton.wake` and `armWake` on the Talk path, the `PhoneStatus.wake` handling that keeps
+  the watch's settings when a status leaves them out, and `PhoneWakeService` started only from Settings. If upstream
+  ships a wake word (its ROADMAP lists `wake.feed`), compare before dropping this.
 - **Talk.** If upstream changes `startChat`, `hear` or `converseOnce`, keep the `mode` branch before the live check,
   `awaitTalk()` at the top of `hear`'s loop, and `MANUAL_TALK` for Talk's recordings. If it adds a `VoicePhase`, give
   it a place in `voicePress` and the panel's label. If upstream adds its own Live switch, use theirs and drop

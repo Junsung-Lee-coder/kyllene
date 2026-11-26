@@ -149,4 +149,14 @@
         <item quantity="many">Appel terminé après %1$d de secondes de silence.</item>
         <item quantity="other">Appel terminé après %1$d secondes de silence.</item>
     </plurals>
+    <string name="wear_wake_title">Mot d\'activation</string>
+    <string name="wear_wake_say">Dites « %1$s »</string>
+    <string name="wear_wake_listening">À l\'écoute du mot d\'activation</string>
+    <string name="wear_wake_stop">Arrêter l\'écoute</string>
+    <string name="wear_wake_state_off">Désactivé. Activez-le dans Kyllene sur votre téléphone.</string>
+    <string name="wear_wake_state_in_app">Écoute 5 secondes quand l\'écran s\'allume</string>
+    <string name="wear_wake_state_no_recognizer">Aucune reconnaissance vocale sur cette montre</string>
+    <string name="wear_wake_state_no_microphone">Autorisez le micro pour écouter</string>
+    <string name="wear_wake_channel">Mot d\'activation</string>
+    <string name="wear_wake_notification_text">Dites votre mot d\'activation pour parler à Hermes.</string>
 </resources>

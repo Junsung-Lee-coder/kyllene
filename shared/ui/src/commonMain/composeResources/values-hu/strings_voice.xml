@@ -104,4 +104,31 @@
         <item quantity="one">Az élő hívás %1$d másodperc csend után véget ért.</item>
         <item quantity="other">Az élő hívás %1$d másodperc csend után véget ért.</item>
     </plurals>
+    <string name="settings_section_wake">Ébresztőszó</string>
+    <string name="settings_phone_wake">Ébresztőszó a telefonon</string>
+    <string name="settings_phone_wake_detail">Mondj egy ébresztőszót az indításhoz: élő hívás, ha a Phone Live be van kapcsolva, különben egy kérés.</string>
+    <string name="settings_watch_wake">Ébresztőszó az órán</string>
+    <string name="settings_watch_wake_detail">Ugyanez az órádon.</string>
+    <string name="settings_wake_phrases">Ébresztőszavak</string>
+    <string name="settings_wake_phrases_detail">Legfeljebb 24, szóközzel elválasztva: egyenként 40, összesen 240 karakter. A * egy szón belüli karaktereket helyettesít. Üresen az alapértelmezettek érvényesek.</string>
+    <string name="settings_wake_save">Mentés</string>
+    <string name="settings_wake_end">Kérés vége</string>
+    <string name="settings_wake_end_detail">0,5–10, 0,5-ös lépésekben. Csak ébresztőszavas kérésekhez.</string>
+    <string name="settings_wake_seconds">%1$s másodperc</string>
+    <string name="settings_wake_start">Figyelés indítása</string>
+    <string name="settings_wake_stop">Figyelés leállítása</string>
+    <string name="settings_wake_state_stopped">Leállítva</string>
+    <string name="settings_wake_state_listening">Figyel az alkalmazáson kívül</string>
+    <string name="settings_wake_state_in_app">Figyel az alkalmazásban</string>
+    <string name="settings_wake_state_no_on_device">Ezen a telefonon nincs eszközön futó beszédfelismerő, ezért az alkalmazáson kívül nem tud figyelni.</string>
+    <string name="settings_wake_state_no_microphone">Engedélyezd a mikrofont a figyeléshez.</string>
+    <string name="settings_wake_state_refused">Az Android nem engedte elindítani a figyelést. Próbáld újra a Kyllene megnyitásával.</string>
+    <string name="settings_wake_phone_listening">Figyelés a telefonon</string>
+    <string name="settings_wake_watch_listening">Figyelés az órán</string>
+    <string name="settings_wake_outside">Az alkalmazáson kívül</string>
+    <string name="settings_wake_screen_off">Kikapcsolt képernyő</string>
+    <string name="settings_wake_charging">Töltés közben</string>
+    <string name="settings_wake_phone_note">Csak az eszközön. 30 másodperces ablakok, utána egy perc szünet, amelyet az Android tétlen telefonon meghosszabbíthat.</string>
+    <string name="settings_wake_watch_note">Nyisd meg az órán az alkalmazást a figyelés indításához.</string>
+    <string name="settings_wake_notification_note">A háttérben figyelés értesítést mutat Leállítás gombbal.</string>
 </resources>

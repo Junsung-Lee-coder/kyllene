@@ -18,7 +18,12 @@ class HeraldWatch : Application() {
     override fun onCreate() {
         super.onCreate()
         callDisplay.refresh()
+        // Fork (requirements §5): hears the screen turn on and the charger; listens only as its settings and the app say.
+        wake.start()
     }
+
+    /** Fork: the watch's wake word. */
+    val wake by lazy { WatchWake(this, this) }
 
     /** A new language: the call channel takes its name, as the watch's notification settings list it. */
     override fun onConfigurationChanged(newConfig: Configuration) {

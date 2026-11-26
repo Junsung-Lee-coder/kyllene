@@ -103,4 +103,31 @@
     <plurals name="voice_error_live_silence">
         <item quantity="other">静音 %1$d 秒后，实时通话已结束。</item>
     </plurals>
+    <string name="settings_section_wake">唤醒词</string>
+    <string name="settings_phone_wake">手机唤醒词</string>
+    <string name="settings_phone_wake_detail">说出唤醒词即可开始：开启 Phone Live 时为实时通话，否则为一次请求。</string>
+    <string name="settings_watch_wake">手表唤醒词</string>
+    <string name="settings_watch_wake_detail">在手表上也是如此。</string>
+    <string name="settings_wake_phrases">唤醒词</string>
+    <string name="settings_wake_phrases_detail">最多 24 个，用空格分隔：每个 40 个字符，总共 240 个。* 匹配词内的任意字符。留空使用默认唤醒词。</string>
+    <string name="settings_wake_save">保存</string>
+    <string name="settings_wake_end">请求结束</string>
+    <string name="settings_wake_end_detail">0.5–10，步长 0.5。仅用于唤醒词发起的请求。</string>
+    <string name="settings_wake_seconds">%1$s 秒</string>
+    <string name="settings_wake_start">开始聆听</string>
+    <string name="settings_wake_stop">停止聆听</string>
+    <string name="settings_wake_state_stopped">已停止</string>
+    <string name="settings_wake_state_listening">正在应用外聆听</string>
+    <string name="settings_wake_state_in_app">正在应用内聆听</string>
+    <string name="settings_wake_state_no_on_device">此手机没有设备端语音识别，因此无法在应用外聆听。</string>
+    <string name="settings_wake_state_no_microphone">请允许使用麦克风以进行聆听。</string>
+    <string name="settings_wake_state_refused">Android 未允许开始聆听。请在打开 Kyllene 时重试。</string>
+    <string name="settings_wake_phone_listening">手机聆听</string>
+    <string name="settings_wake_watch_listening">手表聆听</string>
+    <string name="settings_wake_outside">应用外</string>
+    <string name="settings_wake_screen_off">屏幕关闭时</string>
+    <string name="settings_wake_charging">充电时</string>
+    <string name="settings_wake_phone_note">仅限设备端。30 秒聆听窗口，然后暂停一分钟；手机空闲时 Android 可能会延长暂停。</string>
+    <string name="settings_wake_watch_note">打开手表应用即可开始聆听。</string>
+    <string name="settings_wake_notification_note">后台聆听会显示带有“停止”的通知。</string>
 </resources>

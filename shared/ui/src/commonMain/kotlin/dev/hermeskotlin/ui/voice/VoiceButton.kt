@@ -128,6 +128,31 @@ object VoiceButton {
         return true
     }
 
+    /**
+     * Fork (requirements §5): the wake word was heard with a chat in front. No voice on: start it, as the button does;
+     * Talk at Ready: record the next request. That recording ends on [endMs] of quiet. False when there's no chat in
+     * front to take it, or its voice is busy (the wake word doesn't listen then anyway).
+     */
+    fun wake(endMs: Int): Boolean {
+        val target = targets.value.lastOrNull()?.takeIf(::inFront) ?: return false
+        return when (target.voice.chat.value.phase) {
+            VoicePhase.Off -> {
+                target.voice.armWake(endMs)
+                target.start()
+                true
+            }
+            VoicePhase.Ready -> {
+                target.voice.armWake(endMs)
+                target.voice.talk()
+                true
+            }
+            else -> false
+        }
+    }
+
+    /** Fork: whether a chat is in front to take a wake word. */
+    val canWake: Boolean get() = targets.value.lastOrNull()?.let(::inFront) == true
+
     /** For tests: forgets every binding and press. */
     internal fun reset() {
         targets.value = emptyList()

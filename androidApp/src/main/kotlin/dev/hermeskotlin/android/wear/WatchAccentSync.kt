@@ -1,5 +1,6 @@
 package dev.hermeskotlin.android.wear
 
+import dev.hermeskotlin.core.wear.watchWakeSettings
 import android.content.Context
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
@@ -41,6 +42,19 @@ class WatchAccentSync(private val context: Context, private val settings: Settin
                     return@collectLatest
                 }
                 watches.forEach { relay.accent(it.id, watchAccent(accent)) }
+            }
+        }
+        // Fork (requirements §5): the watch's wake word settings, at once too, so turning it off here stops it there.
+        scope.launch {
+            settings.settings.filterNotNull().map(::watchWakeSettings).distinctUntilChanged().drop(1).collectLatest {
+                val watches = try {
+                    Wearable.getCapabilityClient(context).getCapability(WearCapabilities.WATCH, CapabilityClient.FILTER_REACHABLE).await().nodes
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    return@collectLatest
+                }
+                watches.forEach { relay.wakeSettings(it.id) }
             }
         }
     }

@@ -162,4 +162,16 @@
         <item quantity="one">Call ended after %1$d second of silence.</item>
         <item quantity="other">Call ended after %1$d seconds of silence.</item>
     </plurals>
+    <!-- Fork: the wake word (requirements §5) -->
+    <string name="wear_wake_title">Wake word</string>
+    <!-- %1$s: the first wake word -->
+    <string name="wear_wake_say">Say “%1$s”</string>
+    <string name="wear_wake_listening">Wake word listening</string>
+    <string name="wear_wake_stop">Stop listening</string>
+    <string name="wear_wake_state_off">Off. Turn it on in Kyllene on your phone.</string>
+    <string name="wear_wake_state_in_app">Listens 5 seconds when the screen turns on</string>
+    <string name="wear_wake_state_no_recognizer">No speech recognizer on this watch</string>
+    <string name="wear_wake_state_no_microphone">Allow the microphone to listen</string>
+    <string name="wear_wake_channel">Wake word</string>
+    <string name="wear_wake_notification_text">Say your wake word to talk to Hermes.</string>
 </resources>

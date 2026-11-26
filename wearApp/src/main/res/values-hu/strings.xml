@@ -145,4 +145,14 @@
         <item quantity="one">A hívás %1$d másodperc csend után véget ért.</item>
         <item quantity="other">A hívás %1$d másodperc csend után véget ért.</item>
     </plurals>
+    <string name="wear_wake_title">Ébresztőszó</string>
+    <string name="wear_wake_say">Mondd: „%1$s”</string>
+    <string name="wear_wake_listening">Figyel az ébresztőszóra</string>
+    <string name="wear_wake_stop">Figyelés leállítása</string>
+    <string name="wear_wake_state_off">Ki. Kapcsold be a telefonodon a Kyllene-ben.</string>
+    <string name="wear_wake_state_in_app">5 másodpercig figyel, amikor bekapcsol a képernyő</string>
+    <string name="wear_wake_state_no_recognizer">Nincs beszédfelismerő ezen az órán</string>
+    <string name="wear_wake_state_no_microphone">Engedélyezd a mikrofont a figyeléshez</string>
+    <string name="wear_wake_channel">Ébresztőszó</string>
+    <string name="wear_wake_notification_text">Mondd ki az ébresztőszót, hogy beszélj a Hermesszel.</string>
 </resources>

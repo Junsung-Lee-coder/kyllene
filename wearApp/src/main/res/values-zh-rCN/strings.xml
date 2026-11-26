@@ -141,4 +141,14 @@
     <plurals name="wear_call_ended_silence">
         <item quantity="other">静音 %1$d 秒后，通话已结束。</item>
     </plurals>
+    <string name="wear_wake_title">唤醒词</string>
+    <string name="wear_wake_say">说“%1$s”</string>
+    <string name="wear_wake_listening">正在聆听唤醒词</string>
+    <string name="wear_wake_stop">停止聆听</string>
+    <string name="wear_wake_state_off">已关闭。请在手机上的 Kyllene 中开启。</string>
+    <string name="wear_wake_state_in_app">屏幕亮起时聆听 5 秒</string>
+    <string name="wear_wake_state_no_recognizer">此手表上没有语音识别</string>
+    <string name="wear_wake_state_no_microphone">请允许使用麦克风以进行聆听</string>
+    <string name="wear_wake_channel">唤醒词</string>
+    <string name="wear_wake_notification_text">说出唤醒词即可与 Hermes 对话。</string>
 </resources>

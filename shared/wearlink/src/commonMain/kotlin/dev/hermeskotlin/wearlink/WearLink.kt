@@ -26,6 +26,9 @@ object WearPaths {
     /** Fork: a page of a conversation's stored messages, asked and answered (WatchHistory.kt). */
     const val HISTORY = "/herald/history"
 
+    /** Fork: the watch heard its wake word: a [WakeClaim], asked and answered (WakeWord.kt). Older phones ignore it. */
+    const val WAKE_CLAIM = "/herald/wake/claim"
+
     /** Watch → phone: an optional [PhoneStatusRequest] asking how the phone stands. Phone → watch: a [PhoneStatus]. */
     const val STATUS = "/herald/status"
 
@@ -308,6 +311,8 @@ data class PhoneStatus(
      * confirmed yet, when the watch shows none of them.
      */
     val account: String? = null,
+    /** Fork (requirements §5): the watch's wake word settings; null says nothing, and the watch keeps its own. */
+    val wake: WatchWakeSettings? = null,
 )
 
 /*

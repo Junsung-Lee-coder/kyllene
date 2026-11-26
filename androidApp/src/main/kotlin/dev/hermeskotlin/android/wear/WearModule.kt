@@ -1,5 +1,7 @@
 package dev.hermeskotlin.android.wear
 
+import dev.hermeskotlin.android.wake.PhoneWakeController
+import dev.hermeskotlin.android.wake.WakeVoice
 import dev.hermeskotlin.android.pebble.PebbleOutbox
 import dev.hermeskotlin.android.pebble.PebbleRequests
 import dev.hermeskotlin.android.pebble.PebbleRinger
@@ -30,6 +32,9 @@ val wearModule = module {
     single(createdAtStart = true) { WatchProfileNotifier(androidContext(), get(), get(), get()).also { it.start() } }
     single { WatchRinger(androidContext(), get(), get(), get(), get(), get()) }
     single { WatchAccentSync(androidContext(), get(), get()) }
+    // Fork (requirements §5): the phone's wake word.
+    single { WakeVoice(get(), get(), get(), get(), get(), get(), get(), get(), liveTranscripts = get(), speechGate = get()) }
+    single { PhoneWakeController(androidContext(), get(), get(), get(), get()) }
     // A call for an answer picked up on the phone holds its chat as a call from the watch does.
     // Fork: spelled out, for the live transcripts it keeps.
     viewModel { PhoneCallModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), liveTranscripts = get(), speechGate = get()) }

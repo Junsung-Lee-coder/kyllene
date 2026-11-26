@@ -5,6 +5,7 @@ import androidx.core.content.edit
 import dev.hermeskotlin.wearlink.WatchScope
 import dev.hermeskotlin.wearlink.WatchAccent
 import dev.hermeskotlin.wearlink.WearJson
+import dev.hermeskotlin.wearlink.WatchWakeSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -106,6 +107,21 @@ class WatchStore(context: Context) : ReaderAccount {
         }
     }
 
+    private val _wake = MutableStateFlow(prefs.getString(WAKE, null)?.let { WearJson.decode<WatchWakeSettings>(it.encodeToByteArray()) } ?: WatchWakeSettings())
+
+    /**
+     * Fork (requirements §5): the wake word settings the phone last sent, kept between launches; off until it sends
+     * them. A status saying nothing of them changes nothing here.
+     */
+    val wake: StateFlow<WatchWakeSettings> = _wake.asStateFlow()
+
+    @Synchronized
+    fun setWake(value: WatchWakeSettings) {
+        if (_wake.value == value) return
+        _wake.value = value
+        prefs.edit { putString(WAKE, WearJson.encode(value).decodeToString()) }
+    }
+
     private val _live = MutableStateFlow(prefs.getBoolean(LIVE, WATCH_LIVE_BY_DEFAULT))
 
     /** Talk live, in a voice call, when the gateway can; off, the watch listens and sends what it heard. */
@@ -146,6 +162,7 @@ class WatchStore(context: Context) : ReaderAccount {
         const val LAST_REPLY = "last_reply"
         const val ASKED_TO_RING = "asked_to_ring"
         const val READER_ACCOUNT = "reader_account"
+        const val WAKE = "wake"
         const val MAX_KEPT = 400
     }
 }

@@ -207,4 +207,8 @@
     <string name="phone_place_not_accepted">it wasn’t accepted</string>
     <string name="phone_place_no_reach">Kyllene couldn’t reach the gateway</string>
     <string name="phone_place_refused">the gateway refused it</string>
+    <!-- Fork: the wake word listening out of the app -->
+    <string name="notification_wake_title">Listening for your wake word</string>
+    <string name="notification_wake_text">Say it to start Hermes. Stop turns listening off.</string>
+    <string name="notification_wake_stop">Stop</string>
 </resources>

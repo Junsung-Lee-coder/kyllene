@@ -105,4 +105,31 @@
         <item quantity="many">A chamada ao vivo terminou após %1$d de segundos de silêncio.</item>
         <item quantity="other">A chamada ao vivo terminou após %1$d segundos de silêncio.</item>
     </plurals>
+    <string name="settings_section_wake">Palavra de ativação</string>
+    <string name="settings_phone_wake">Palavra de ativação no celular</string>
+    <string name="settings_phone_wake_detail">Diga uma palavra de ativação para começar: uma chamada ao vivo com o Phone Live ligado; senão, uma solicitação.</string>
+    <string name="settings_watch_wake">Palavra de ativação no relógio</string>
+    <string name="settings_watch_wake_detail">O mesmo no seu relógio.</string>
+    <string name="settings_wake_phrases">Palavras de ativação</string>
+    <string name="settings_wake_phrases_detail">Até 24, separadas por espaços: 40 caracteres cada, 240 no total. * corresponde a caracteres dentro de uma palavra. Vazio usa as padrão.</string>
+    <string name="settings_wake_save">Salvar</string>
+    <string name="settings_wake_end">Fim da solicitação</string>
+    <string name="settings_wake_end_detail">0,5–10 em passos de 0,5. Só solicitações por palavra de ativação.</string>
+    <string name="settings_wake_seconds">%1$s segundos</string>
+    <string name="settings_wake_start">Começar a ouvir</string>
+    <string name="settings_wake_stop">Parar de ouvir</string>
+    <string name="settings_wake_state_stopped">Parado</string>
+    <string name="settings_wake_state_listening">Ouvindo fora do app</string>
+    <string name="settings_wake_state_in_app">Ouvindo no app</string>
+    <string name="settings_wake_state_no_on_device">Este celular não tem reconhecimento de voz no dispositivo, então não pode ouvir fora do app.</string>
+    <string name="settings_wake_state_no_microphone">Permita o microfone para ouvir.</string>
+    <string name="settings_wake_state_refused">O Android não deixou começar a ouvir. Tente de novo com o Kyllene aberto.</string>
+    <string name="settings_wake_phone_listening">Escuta no celular</string>
+    <string name="settings_wake_watch_listening">Escuta no relógio</string>
+    <string name="settings_wake_outside">Fora do app</string>
+    <string name="settings_wake_screen_off">Tela desligada</string>
+    <string name="settings_wake_charging">Carregando</string>
+    <string name="settings_wake_phone_note">Só no dispositivo. Janelas de 30 segundos e depois um minuto de pausa, que o Android pode alongar com o celular ocioso.</string>
+    <string name="settings_wake_watch_note">Abra o app no relógio para começar a ouvir.</string>
+    <string name="settings_wake_notification_note">Ouvir em segundo plano mostra uma notificação com Parar.</string>
 </resources>

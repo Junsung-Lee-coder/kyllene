@@ -270,6 +270,18 @@ class ChatNotifications(
         .addAction(0, str(R.string.notification_voice_end), end)
         .build()
 
+    /** Fork (requirements §5): the ongoing notification while the wake word is listened for out of the app, with [stop]. */
+    fun wakeListening(stop: PendingIntent): Notification = base(CHANNEL_VOICE)
+        .setContentTitle(str(R.string.notification_wake_title))
+        .setContentText(str(R.string.notification_wake_text))
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .setOngoing(true)
+        .setAutoCancel(false)
+        .setSilent(true)
+        .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+        .addAction(0, str(R.string.notification_wake_stop), stop)
+        .build()
+
     /**
      * The ongoing notification of a reply read aloud kept up like music ([ReadAloudService]): a media notification of
      * [session], so the lock screen shows it with Pause or Resume ([toggle]) and [stop]. It says nothing of the reply.
@@ -912,6 +924,9 @@ class ChatNotifications(
         const val PUSH_TEST_ID = 5
         const val ROOM_ID = 6
         const val VOICE_ID = 7
+
+        /** Fork: the wake word listening out of the app ([dev.hermeskotlin.android.wake.PhoneWakeService]). */
+        const val WAKE_ID = 7_005
         const val INBOX_ID = 8
 
         /** On the launch intent of an Inbox notification: the run's key ([dev.hermeskotlin.core.inbox.InboxRun.key]). */

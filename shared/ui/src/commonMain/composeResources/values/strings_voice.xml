@@ -112,4 +112,33 @@
         <item quantity="one">The live call ended after %1$d second of silence.</item>
         <item quantity="other">The live call ended after %1$d seconds of silence.</item>
     </plurals>
+    <!-- Fork: the wake word (requirements §5) -->
+    <string name="settings_section_wake">Wake word</string>
+    <string name="settings_phone_wake">Phone wake word</string>
+    <string name="settings_phone_wake_detail">Say a wake word to start: a live call with Phone Live on, otherwise one request.</string>
+    <string name="settings_watch_wake">Watch wake word</string>
+    <string name="settings_watch_wake_detail">The same on your watch.</string>
+    <string name="settings_wake_phrases">Wake words</string>
+    <string name="settings_wake_phrases_detail">Up to 24, separated by spaces: 40 characters each, 240 in all. * matches inside a word. Empty uses the defaults.</string>
+    <string name="settings_wake_save">Save</string>
+    <string name="settings_wake_end">End of request</string>
+    <string name="settings_wake_end_detail">0.5–10 in 0.5 steps. Wake requests only.</string>
+    <!-- %1$s: seconds as shown, "2.0" -->
+    <string name="settings_wake_seconds">%1$s seconds</string>
+    <string name="settings_wake_start">Start listening</string>
+    <string name="settings_wake_stop">Stop listening</string>
+    <string name="settings_wake_state_stopped">Stopped</string>
+    <string name="settings_wake_state_listening">Listening outside the app</string>
+    <string name="settings_wake_state_in_app">Listening in the app</string>
+    <string name="settings_wake_state_no_on_device">This phone has no on-device speech recognizer, so it can't listen outside the app.</string>
+    <string name="settings_wake_state_no_microphone">Allow the microphone to listen.</string>
+    <string name="settings_wake_state_refused">Android didn't let it start listening. Try again with Kyllene open.</string>
+    <string name="settings_wake_phone_listening">Phone listening</string>
+    <string name="settings_wake_watch_listening">Watch listening</string>
+    <string name="settings_wake_outside">Outside the app</string>
+    <string name="settings_wake_screen_off">Screen off</string>
+    <string name="settings_wake_charging">While charging</string>
+    <string name="settings_wake_phone_note">On-device only. 30-second windows, then a minute's pause, which Android may stretch while the phone is idle.</string>
+    <string name="settings_wake_watch_note">Open the watch app to start listening.</string>
+    <string name="settings_wake_notification_note">Background listening shows a notification with Stop.</string>
 </resources>

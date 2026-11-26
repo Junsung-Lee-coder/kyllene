@@ -28,7 +28,23 @@ class WatchRecorder {
 
     /** The recording as WAV, or null when nothing was said. [onLevel] gets the input level, 0..1. */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    suspend fun record(onLevel: (Float) -> Unit): ByteArray? = withContext(Dispatchers.IO) {
+    suspend fun record(onLevel: (Float) -> Unit): ByteArray? = record(Endpoint.TALK, onLevel)
+
+    /**
+     * Fork (requirements §5): when a recording ends by itself: after [Endpoint.silenceMs] of quiet once speech was
+     * heard, after [Endpoint.idleMs] with none, at [Endpoint.maxMs] in all. Talk keeps its own values ([Endpoint.TALK]);
+     * a request the wake word started ends on the wake setting's quiet spell, with no length cap.
+     */
+    data class Endpoint(val silenceMs: Long, val idleMs: Long, val maxMs: Long) {
+        companion object {
+            val TALK = Endpoint(SILENCE_MS, IDLE_MS, MAX_MS)
+
+            fun wake(endSilenceMs: Int) = Endpoint(endSilenceMs.toLong(), dev.hermeskotlin.wearlink.WAKE_IDLE_MS, Long.MAX_VALUE)
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
+    suspend fun record(endpoint: Endpoint, onLevel: (Float) -> Unit): ByteArray? = withContext(Dispatchers.IO) {
         finishRequested = false
         val minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val record = AudioRecord(
@@ -75,12 +91,12 @@ class WatchRecorder {
                     quietSince = -1
                 } else if (heard && level < maxOf(SPEECH_LEVEL * 0.8f, noise * 1.6f)) {
                     if (quietSince < 0) quietSince = elapsed
-                    if (elapsed - quietSince >= SILENCE_MS) break
+                    if (elapsed - quietSince >= endpoint.silenceMs) break
                 } else {
                     quietSince = -1
                 }
-                if (!heard && elapsed >= IDLE_MS) break
-                if (elapsed >= MAX_MS) break
+                if (!heard && elapsed >= endpoint.idleMs) break
+                if (elapsed >= endpoint.maxMs) break
             }
         } finally {
             runCatching { record.stop() }

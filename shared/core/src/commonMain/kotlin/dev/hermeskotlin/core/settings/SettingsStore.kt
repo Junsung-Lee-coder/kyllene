@@ -1,5 +1,6 @@
 package dev.hermeskotlin.core.settings
 
+import dev.hermeskotlin.wearlink.WakeEndSilence
 import dev.hermeskotlin.wearlink.LIVE_SILENCE_DEFAULT_SECONDS
 import dev.hermeskotlin.core.bots.SidebarMode
 import dev.hermeskotlin.core.gateway.GatewayUrl
@@ -122,6 +123,24 @@ data class AppSettings(
     val phoneLiveSilenceSeconds: Int = LIVE_SILENCE_DEFAULT_SECONDS,
     /** Fork: the same for a live call on the watch: set here, sent to the watch with each call, which ends it. */
     val watchLiveSilenceSeconds: Int = LIVE_SILENCE_DEFAULT_SECONDS,
+    /**
+     * Fork (requirements §5): the phone's and the watch's wake word, each off until turned on. Hearing a phrase starts
+     * a live call (that device's Live on) or one request (off); it's never the request itself.
+     */
+    val phoneWake: Boolean = false,
+    val watchWake: Boolean = false,
+    /** Fork: the phrases, space-separated, as saved ([WakePhrases.normalize]); empty uses the default list. Both devices. */
+    val wakePhrases: String = "",
+    /** Fork: a quiet spell this long ends a request a wake word started (0.5–10 s); Talk's own recordings aren't affected. */
+    val wakeEndSilenceMs: Int = WakeEndSilence.DEFAULT_MS,
+    /** Fork: the phone listens out of the app, in windows, once the person starts it (Settings › Start listening). */
+    val phoneWakeBackground: Boolean = false,
+    val phoneWakeScreenOff: Boolean = false,
+    val phoneWakeCharging: Boolean = false,
+    /** Fork: the watch listens outside its app, from the next time its app is opened. */
+    val watchWakeBackground: Boolean = false,
+    val watchWakeScreenOff: Boolean = false,
+    val watchWakeCharging: Boolean = false,
     /** What tapping Send does while a reply is running; a long press on Send picks another for one message. */
     val runningSend: RunningSend = RunningSend.Steer,
     /**

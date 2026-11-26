@@ -145,4 +145,14 @@
         <item quantity="one">Anruf nach %1$d Sekunde Stille beendet.</item>
         <item quantity="other">Anruf nach %1$d Sekunden Stille beendet.</item>
     </plurals>
+    <string name="wear_wake_title">Aktivierungswort</string>
+    <string name="wear_wake_say">Sag „%1$s“</string>
+    <string name="wear_wake_listening">Aktivierungswort hört zu</string>
+    <string name="wear_wake_stop">Zuhören beenden</string>
+    <string name="wear_wake_state_off">Aus. Schalte es in Kyllene auf dem Telefon ein.</string>
+    <string name="wear_wake_state_in_app">Hört 5 Sekunden zu, wenn der Bildschirm angeht</string>
+    <string name="wear_wake_state_no_recognizer">Keine Spracherkennung auf dieser Uhr</string>
+    <string name="wear_wake_state_no_microphone">Erlaube das Mikrofon, um zuzuhören</string>
+    <string name="wear_wake_channel">Aktivierungswort</string>
+    <string name="wear_wake_notification_text">Sag dein Aktivierungswort, um mit Hermes zu sprechen.</string>
 </resources>

@@ -1,5 +1,8 @@
 package dev.hermeskotlin.ui.voice
 
+import kotlinx.coroutines.flow.combine
+import dev.hermeskotlin.wearlink.WAKE_IDLE_MS
+import dev.hermeskotlin.wearlink.WakeEndSilence
 import dev.hermeskotlin.wearlink.LIVE_SILENCE_DEFAULT_SECONDS
 import dev.hermeskotlin.core.chat.ChatMessage
 import dev.hermeskotlin.core.chat.ChatSession
@@ -193,6 +196,25 @@ class VoiceController(
             stopReading()
         }
         scope.coroutineContext[Job]?.invokeOnCompletion { quiet() }
+        // Fork (requirements §5): whether this controller has the microphone or the speaker, for the wake word, which
+        // listens only while every voice on the phone is idle (Talk at Ready counts as idle).
+        scope.launch {
+            combine(_chat, _reading, _dictation) { chat, reading, dictation ->
+                chat.phase !in IDLE_PHASES || reading.key != null || dictation.active
+            }.collect { VoiceMedia.report(this@VoiceController, it) }
+        }
+        scope.coroutineContext[Job]?.invokeOnCompletion { VoiceMedia.report(this@VoiceController, false) }
+    }
+
+    /** Fork: the next recording ends on this quiet spell: it was started by the wake word. Once; null: none waiting. */
+    private var wakeEndMs: Long? = null
+
+    /**
+     * Fork (requirements §5): the next request this chat records was started by the wake word, so a quiet spell of
+     * [endMs] ends it (nothing said within [WAKE_IDLE_MS], nothing is sent). Talk's own recordings aren't affected.
+     */
+    fun armWake(endMs: Int) {
+        wakeEndMs = WakeEndSilence.clamp(endMs).toLong()
     }
     private var speechJob: Job? = null
     /** The gateway whose speech socket couldn't open in this chat; its replies are read out once they're done. */
@@ -592,6 +614,8 @@ class VoiceController(
      */
     private suspend fun startLive(session: ChatSession, gateway: GatewayUrl, profile: String?, opener: CallReason?, silenceSeconds: Int, onConnectionResult: suspend () -> Unit): Boolean {
         val calls = liveCalls ?: return false
+        // Fork: a live call has no recording for a wake word's quiet spell to end.
+        wakeEndMs = null
         val status = audio.voiceLiveStatus(gateway, profile)
         if (status !is ApiResult.Success || !status.value.live) return false
         val call = calls.create() ?: return false
@@ -688,6 +712,7 @@ class VoiceController(
     }
 
     fun stopChat() {
+        wakeEndMs = null
         stoppedByUser = true
         chatJob?.cancel()
         chatJob = null
@@ -1047,13 +1072,18 @@ class VoiceController(
         while (true) {
             // Fork: Talk records only on a press.
             awaitTalk()
+            // Fork: a request the wake word started ends on its own quiet spell; then the chat is Ready as ever.
+            val wakeOrTalk = wakeEndMs?.let { end ->
+                wakeEndMs = null
+                VoiceActivity(speechLevel = activity.speechLevel, silenceMs = end, idleMs = WAKE_IDLE_MS, maxMs = Long.MAX_VALUE)
+            } ?: activity
             _chat.update { it.copy(phase = VoicePhase.Listening, level = 0f, hearing = false) }
             // Muted: the microphone stays shut until it's unmuted, between turns and for a question asked aloud alike.
             _chat.first { !it.muted }
             val recording = try {
                 unlessMuted({ null }) {
                     recorder.record(
-                        activity,
+                        wakeOrTalk,
                         onLevel = { level ->
                             // Fork: Send asked for before the recorder started, which forgets it then.
                             if (talkSend) recorder.finish()

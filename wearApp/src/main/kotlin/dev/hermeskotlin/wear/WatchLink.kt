@@ -34,6 +34,8 @@ import dev.hermeskotlin.wearlink.WearJson
 import dev.hermeskotlin.wearlink.WearPaths
 import dev.hermeskotlin.wearlink.DefaultCallTarget
 import dev.hermeskotlin.wearlink.HistoryRequest
+import dev.hermeskotlin.wearlink.WAKE_CLAIM_TIMEOUT_MS
+import dev.hermeskotlin.wearlink.WakeClaim
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -166,6 +168,27 @@ class WatchLink(
             chat.botProfile != null -> WatchHistoryStore.Conversation(scope, null, chat.botProfile)
             chat.id != null -> WatchHistoryStore.Conversation(scope, chat.id, null)
             else -> null
+        }
+    }
+
+    /** Fork: the phone sent wake word settings, so it has a wake word of its own, and answers claims. */
+    @Volatile private var phoneWake = false
+    private var wakeClaim: Pair<String, CompletableDeferred<Boolean>>? = null
+
+    /**
+     * Fork (requirements §5): the watch heard its wake word; may it start? The phone answers for both devices, so one
+     * utterance starts once. No answer in time: an older phone (it never sent wake settings, so it has no wake word to
+     * clash with) lets it start; a newer one's silence doesn't, and nothing is asked again.
+     */
+    suspend fun claimWake(): Boolean = withContext(main) {
+        val id = "watch-" + UUID.randomUUID()
+        val answer = CompletableDeferred<Boolean>()
+        wakeClaim = id to answer
+        try {
+            if (send(WearPaths.WAKE_CLAIM, WearJson.encode(WakeClaim(id))) != null) return@withContext false
+            withTimeoutOrNull(WAKE_CLAIM_TIMEOUT_MS) { answer.await() } ?: !phoneWake
+        } finally {
+            if (wakeClaim?.first == id) wakeClaim = null
         }
     }
 
@@ -643,8 +666,17 @@ class WatchLink(
                 }
                 WearPaths.RING_END -> WearJson.decode<RingEnd>(data)?.let { rings.stop(it.requestId) }
                 WearPaths.HISTORY -> scope.launch { reader.accept(data) }
+                WearPaths.WAKE_CLAIM -> WearJson.decode<WakeClaim>(data)?.let { claim ->
+                    wakeClaim?.takeIf { it.first == claim.id }?.second?.complete(claim.granted == true)
+                }
                 WearPaths.STATUS -> WearJson.decode<PhoneStatus>(data)?.let { status ->
                     if (status.accent?.let(store::setAccent) == true) TileService.getUpdater(context).requestUpdate(AskTileService::class.java)
+                    // Fork (requirements §5): the wake word settings, from any status that says them; one that doesn't
+                    // leaves the watch's as they are.
+                    status.wake?.let {
+                        phoneWake = true
+                        store.setWake(it)
+                    }
                     val pending = statusRequest
                     if (status.requestId != latestStatus && (status.profileSync || status.requestId != null)) return@let
                     if (pending == null && (!profileChecked || status.activeScope != store.phoneScope)) return@let

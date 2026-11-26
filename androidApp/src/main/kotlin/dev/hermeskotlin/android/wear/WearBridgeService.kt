@@ -1,5 +1,6 @@
 package dev.hermeskotlin.android.wear
 
+import dev.hermeskotlin.wearlink.WakeClaim
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
@@ -74,6 +75,8 @@ class WearBridgeService : WearableListenerService() {
             WearPaths.CHATS -> { relay.chats(node, WearJson.decode<ChatListRequest>(event.data)?.requestId); keepUp() }
             // Fork: a page of stored messages for the watch's reader.
             WearPaths.HISTORY -> WearJson.decode<HistoryRequest>(event.data)?.let { relay.history(node, it); keepUp() }
+            // Fork: the watch heard its wake word; the first of the phone's and the watch's starts.
+            WearPaths.WAKE_CLAIM -> WearJson.decode<WakeClaim>(event.data)?.let { relay.wakeClaim(node, it) }
             WearPaths.STATUS -> {
                 val request = WearJson.decode<PhoneStatusRequest>(event.data)
                 scope.launch {

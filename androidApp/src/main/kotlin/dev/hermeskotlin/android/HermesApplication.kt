@@ -1,5 +1,6 @@
 package dev.hermeskotlin.android
 
+import dev.hermeskotlin.android.wake.PhoneWakeController
 import android.app.Application
 import android.content.Intent
 import android.content.res.Configuration
@@ -72,6 +73,8 @@ class HermesApplication : Application() {
         // Wear OS watches and Pebbles ring along with the phone.
         koin.get<ChatNotifications>().alsoRings = ChatNotifications.AllRings(listOf(koin.get<WatchRinger>(), koin.get<PebbleRinger>()))
         koin.get<WatchAccentSync>().start()
+        // Fork: the phone's wake word; it listens only once turned on, and out of the app only once started.
+        koin.get<PhoneWakeController>().start()
         koin.get<ChatNotifier>().start()
         koin.get<BotNotifier>().start()
         koin.get<RoomNotifier>().start()

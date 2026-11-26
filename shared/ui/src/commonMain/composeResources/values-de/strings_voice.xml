@@ -104,4 +104,31 @@
         <item quantity="one">Der Live-Anruf wurde nach %1$d Sekunde Stille beendet.</item>
         <item quantity="other">Der Live-Anruf wurde nach %1$d Sekunden Stille beendet.</item>
     </plurals>
+    <string name="settings_section_wake">Aktivierungswort</string>
+    <string name="settings_phone_wake">Aktivierungswort am Telefon</string>
+    <string name="settings_phone_wake_detail">Ein Aktivierungswort startet: einen Live-Anruf, wenn Phone Live an ist, sonst eine Anfrage.</string>
+    <string name="settings_watch_wake">Aktivierungswort an der Uhr</string>
+    <string name="settings_watch_wake_detail">Dasselbe an deiner Uhr.</string>
+    <string name="settings_wake_phrases">Aktivierungswörter</string>
+    <string name="settings_wake_phrases_detail">Bis zu 24, durch Leerzeichen getrennt: je 40 Zeichen, insgesamt 240. * steht für Zeichen innerhalb eines Worts. Leer nutzt die Standardwörter.</string>
+    <string name="settings_wake_save">Speichern</string>
+    <string name="settings_wake_end">Ende der Anfrage</string>
+    <string name="settings_wake_end_detail">0,5–10 in Schritten von 0,5. Nur für Anfragen per Aktivierungswort.</string>
+    <string name="settings_wake_seconds">%1$s Sekunden</string>
+    <string name="settings_wake_start">Zuhören starten</string>
+    <string name="settings_wake_stop">Zuhören beenden</string>
+    <string name="settings_wake_state_stopped">Gestoppt</string>
+    <string name="settings_wake_state_listening">Hört außerhalb der App zu</string>
+    <string name="settings_wake_state_in_app">Hört in der App zu</string>
+    <string name="settings_wake_state_no_on_device">Dieses Telefon hat keine Spracherkennung auf dem Gerät und kann daher außerhalb der App nicht zuhören.</string>
+    <string name="settings_wake_state_no_microphone">Erlaube das Mikrofon, um zuzuhören.</string>
+    <string name="settings_wake_state_refused">Android hat das Zuhören nicht gestartet. Versuche es bei geöffnetem Kyllene noch einmal.</string>
+    <string name="settings_wake_phone_listening">Zuhören am Telefon</string>
+    <string name="settings_wake_watch_listening">Zuhören an der Uhr</string>
+    <string name="settings_wake_outside">Außerhalb der App</string>
+    <string name="settings_wake_screen_off">Bildschirm aus</string>
+    <string name="settings_wake_charging">Beim Laden</string>
+    <string name="settings_wake_phone_note">Nur auf dem Gerät. 30-Sekunden-Fenster, dann eine Minute Pause, die Android im Ruhezustand verlängern kann.</string>
+    <string name="settings_wake_watch_note">Öffne die App auf der Uhr, um das Zuhören zu starten.</string>
+    <string name="settings_wake_notification_note">Zuhören im Hintergrund zeigt eine Benachrichtigung mit Stopp.</string>
 </resources>

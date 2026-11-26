@@ -1,5 +1,10 @@
 package dev.hermeskotlin.core.wear
 
+import dev.hermeskotlin.core.settings.AppSettings
+import dev.hermeskotlin.wearlink.WakeEndSilence
+import dev.hermeskotlin.wearlink.WatchWakeSettings
+import dev.hermeskotlin.wearlink.WakeClaims
+import dev.hermeskotlin.wearlink.WakeClaim
 import dev.hermeskotlin.core.auth.AuthApi
 import dev.hermeskotlin.core.bots.BotsApi
 import dev.hermeskotlin.core.bots.BotChats
@@ -326,7 +331,23 @@ class WatchRelay(
             activeScope = gateway?.let { WatchScope(it.value, profiles.get(it)) },
             scope = gateway?.let { WatchScope(it.value, profile) },
             // Fork: the watch's reader, and whose its saved pages are.
-            history = true, account = gateway?.let { historyReader.accountKey(it) }) to gateway
+            history = true, account = gateway?.let { historyReader.accountKey(it) },
+            // Fork: the watch's wake word settings; not loaded yet, nothing is said, and the watch keeps its own.
+            wake = settings.settings.value?.let(::watchWakeSettings)) to gateway
+    }
+
+    /** Fork (requirements §5): one wake word start per utterance, the phone's own and the watch's ([WakeClaims]). */
+    val wakeClaims = WakeClaims(monotonicMillis())
+
+    /** Fork: answers the watch [node]'s [claim] to start on its wake word. */
+    fun wakeClaim(node: String, claim: WakeClaim) {
+        val granted = wakeClaims.claim(claim.id)
+        scope.launch { outbox.sendSafely(node, WearPaths.WAKE_CLAIM, WearJson.encode(WakeClaim(claim.id, granted))) }
+    }
+
+    /** Fork: tells the watch [node] how the phone stands unasked, for its wake word settings changed here. */
+    fun wakeSettings(node: String) {
+        scope.launch { outbox.sendSafely(node, WearPaths.STATUS, WearJson.encode(currentStatus(null, null).first)) }
     }
 
     /** Whether [gateway]'s live voice was asked lately: the watch asks how the phone stands often, the gateway every few minutes. */
@@ -866,4 +887,20 @@ private inline fun safely(block: () -> Boolean): Boolean = try {
     throw e
 } catch (_: Exception) {
     false
+}
+
+/** Fork (requirements §5): the watch's wake word settings, from the phone's. */
+fun watchWakeSettings(s: AppSettings): WatchWakeSettings = WatchWakeSettings(
+    enabled = s.watchWake,
+    phrases = s.wakePhrases,
+    endSilenceMs = WakeEndSilence.clamp(s.wakeEndSilenceMs),
+    background = s.watchWakeBackground,
+    screenOff = s.watchWakeScreenOff,
+    charging = s.watchWakeCharging,
+)
+
+/** Fork: a monotonic clock in milliseconds from now. */
+internal fun monotonicMillis(): () -> Long {
+    val origin = kotlin.time.TimeSource.Monotonic.markNow()
+    return { origin.elapsedNow().inWholeMilliseconds }
 }

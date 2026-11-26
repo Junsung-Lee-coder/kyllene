@@ -389,6 +389,12 @@
             </intent-filter>
         </service>
 
+        <!-- Fork (requirements §5): the wake word out of the app, started from Settings with the app on screen. -->
+        <service
+            android:name=".wake.PhoneWakeService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <service
             android:name=".notify.VoiceCallService"
             android:exported="false"
