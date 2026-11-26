@@ -3,6 +3,7 @@ package dev.hermeskotlin.core.di
 import dev.hermeskotlin.core.auth.AuthApi
 import dev.hermeskotlin.core.auth.BrowserSignIn
 import dev.hermeskotlin.core.auth.NativeTokens
+import dev.hermeskotlin.core.custom.SessionBindings
 import dev.hermeskotlin.core.auth.PersistentCookiesStorage
 import dev.hermeskotlin.core.auth.WebCookieJar
 import dev.hermeskotlin.core.cache.OfflineCache
@@ -92,7 +93,8 @@ val coreModule = module {
         val client = get<HttpClient>()
         ConnectionCheck(get(), get(), openSocket = { url, ticket -> client.openGatewaySocket(url, ticket) })
     }
-    single { AuthApi(get(), get(), get()) }
+    single { SessionBindings(get()) }
+    single { AuthApi(get(), get(), get(), get()) }
     single { BrowserSignIn(get(), get()) }
     single { GatewayRepository(get()) }
     single { SessionsApi(get()) }

@@ -19,6 +19,7 @@ import dev.hermeskotlin.core.chat.LastChatStore
 import dev.hermeskotlin.core.connection.ConnectionState
 import dev.hermeskotlin.core.connection.GatewayConnection
 import dev.hermeskotlin.core.custom.RetainedCopies
+import dev.hermeskotlin.core.custom.SessionBindings
 import dev.hermeskotlin.core.gateway.AccessTokens
 import dev.hermeskotlin.core.gateway.ClientCertAliases
 import dev.hermeskotlin.core.gateway.GatewayList
@@ -195,9 +196,11 @@ class AppViewModel(
             val saved = list.current ?: list.primary?.also { gateways.select(it.url) }
             _route.value = when {
                 saved == null -> Route.Connect()
-                auth.hasStoredSession(saved.gatewayUrl) -> home(saved).also {
+                // Fork: before anything reads the saved chats, they're given to the account the kept session was
+                // confirmed to be, or put away (keptSessionCache).
+                auth.hasStoredSession(saved.gatewayUrl) -> if (!keptSessionCache(saved)) cacheRefused(saved) else home(saved).also {
                     connection.start(saved.gatewayUrl)
-                    confirmCacheOwner(saved.gatewayUrl)
+                    confirmCacheOwner(saved)
                 }
                 else -> Route.SignIn(saved)
             }
@@ -307,11 +310,15 @@ class AppViewModel(
             if (saved.clientCertAlias != null) certs.changed(saved.gatewayUrl.host)
             // Fork: before anything reads the device's saved chats, they're the account's just signed in to; another
             // account's are put away (OfflineCache.bindOwner). If they can't be, this sign-in doesn't go on.
-            if (cache != null && !cache.bindOwner(saved.gatewayUrl, cacheOwner(saved.gatewayUrl))) {
+            val owner = cacheOwner(saved.gatewayUrl)
+            if (cache != null && !cache.bindOwner(saved.gatewayUrl, owner)) {
                 auth.signOut(saved.gatewayUrl)
-                _route.value = Route.SignIn(saved, notice = SignInNotice.SavedChatsNotPutAway)
+                _route.value = cacheRefused(saved)
                 return@launch
             }
+            // Only now is the stored session known to be [owner]'s, with its saved chats given to it. Unverified, or if
+            // this can't be written, it stays pending: the next start puts the saved chats away again.
+            if (owner != null) quietly { auth.sessionBindings.bound(saved.gatewayUrl, owner) }
             sessionsChanged.update { it + 1 }
             connection.start(saved.gatewayUrl)
             _route.value = home(saved)
@@ -641,11 +648,15 @@ class AppViewModel(
         connection.stop()
         host.close()
         gateways.select(gateway.url)
-        _route.value = if (auth.hasStoredSession(gateway.gatewayUrl)) home(gateway, fresh).also {
-            connection.start(gateway.gatewayUrl)
-            confirmCacheOwner(gateway.gatewayUrl)
+        _route.value = when {
+            !auth.hasStoredSession(gateway.gatewayUrl) -> Route.SignIn(gateway)
+            // Fork: as at start, the saved chats are the kept session's account's before anything reads them.
+            !keptSessionCache(gateway) -> cacheRefused(gateway)
+            else -> home(gateway, fresh).also {
+                connection.start(gateway.gatewayUrl)
+                confirmCacheOwner(gateway)
+            }
         }
-        else Route.SignIn(gateway)
     }
 
     /** Fork: the account [gateway]'s session is for, as the gateway verifies it; null when it can't say. */
@@ -653,13 +664,49 @@ class AppViewModel(
         (auth.me(gateway) as? ApiResult.Success)?.value?.let { RetainedCopies.owner(it.provider, it.userId) }
 
     /**
-     * Fork: a session kept from before is checked once the gateway answers. Copies saved before owners were recorded,
-     * or for another account, are put away then. Unverified (offline), nothing changes.
+     * Fork: a kept session's saved chats, before anything reads them, offline too. They go to the account the session
+     * was confirmed to be ([SessionBindings]); when it wasn't (a sign-in that didn't finish, or a session from before
+     * owners were recorded), they're all put away until the gateway says whose it is. False when what isn't the
+     * session's couldn't be put away: the session is signed out then, and nothing reads the saved chats.
      */
-    private fun confirmCacheOwner(gateway: GatewayUrl) {
-        val cache = cache ?: return
-        viewModelScope.launch { cacheOwner(gateway)?.let { cache.bindOwner(gateway, it) } }
+    private suspend fun keptSessionCache(gateway: SavedGateway): Boolean {
+        val cache = cache ?: return true
+        val owner = try { auth.sessionBindings.owner(gateway.gatewayUrl) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+        if (cache.bindOwner(gateway.gatewayUrl, owner)) return true
+        auth.signOut(gateway.gatewayUrl)
+        return false
     }
+
+    /** Fork: the sign-in screen saying the saved chats couldn't be put away. */
+    private fun cacheRefused(gateway: SavedGateway) = Route.SignIn(gateway, notice = SignInNotice.SavedChatsNotPutAway)
+
+    /**
+     * Fork: once the gateway answers, a kept session is checked against the account it was confirmed to be. Another
+     * (or a first) answer gives the saved chats to the verified account and records it; if what isn't its can't be
+     * put away, the session is signed out, as at sign-in. Unverified (offline), nothing changes.
+     */
+    private fun confirmCacheOwner(gateway: SavedGateway) {
+        val cache = cache ?: return
+        val url = gateway.gatewayUrl
+        viewModelScope.launch {
+            val verified = cacheOwner(url) ?: return@launch
+            if (quietly { auth.sessionBindings.owner(url) } == verified) return@launch
+            if (cache.bindOwner(url, verified)) {
+                quietly { auth.sessionBindings.bound(url, verified) }
+                return@launch
+            }
+            if (currentGateway()?.url == gateway.url) {
+                cancelPendingCall()
+                connection.stop()
+                host.close()
+            }
+            auth.signOut(url)
+            if (currentGateway()?.url == gateway.url) _route.value = cacheRefused(gateway)
+        }
+    }
+
+    private suspend fun <T> quietly(block: suspend () -> T): T? =
+        try { block() } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
 
     /** The last chat the user had open on [gateway] in its picked profile, or a fresh one (always, with [fresh]). */
     private suspend fun home(gateway: SavedGateway, fresh: Boolean = false): Route.Chat {

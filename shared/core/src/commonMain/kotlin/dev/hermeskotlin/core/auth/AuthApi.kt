@@ -1,5 +1,6 @@
 package dev.hermeskotlin.core.auth
 
+import dev.hermeskotlin.core.custom.SessionBindings
 import dev.hermeskotlin.core.gateway.GatewayUrl
 import dev.hermeskotlin.core.network.ApiResult
 import dev.hermeskotlin.core.network.apiCall
@@ -46,7 +47,23 @@ class AuthApi(
     private val cookies: PersistentCookiesStorage,
     /** Tests that never sign in through the browser leave this out. */
     private val tokens: NativeTokens = NativeTokens(InMemoryKeyValueStore()),
+    /** Fork: which account each stored session was confirmed to be (see [SessionBindings]). */
+    val sessionBindings: SessionBindings = SessionBindings(InMemoryKeyValueStore()),
 ) {
+    /**
+     * Fork: a new sign-in's credentials are no known account's until its saved chats are given to it, so the binding
+     * goes to pending before they're stored. If even that can't be written, the sign-in doesn't happen.
+     */
+    private suspend fun newCredentials(url: GatewayUrl, login: suspend () -> ApiResult<Unit>): ApiResult<Unit> {
+        try {
+            sessionBindings.pending(url)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return ApiResult.Failed(0, "Couldn't get this device ready for the sign-in. Try again.")
+        }
+        return login()
+    }
 
     /** `GET /auth/native/authorize`, the page the browser sign-in starts at. A blank [provider] lets the gateway choose. */
     fun nativeAuthorizeUrl(url: GatewayUrl, provider: String?, codeChallenge: String, redirectUri: String, state: String): String =
@@ -62,7 +79,7 @@ class AuthApi(
      * `POST /auth/native/token`: the browser's one-time code and the PKCE verifier → bearer tokens, kept for [url].
      * An old password session's cookies go, so the app can't look signed in on them once the tokens end.
      */
-    suspend fun redeemNativeCode(url: GatewayUrl, code: String, codeVerifier: String): ApiResult<Unit> =
+    suspend fun redeemNativeCode(url: GatewayUrl, code: String, codeVerifier: String): ApiResult<Unit> = newCredentials(url) {
         apiCall {
             client.post(url.resolve("auth/native/token")) {
                 contentType(ContentType.Application.Json)
@@ -72,15 +89,17 @@ class AuthApi(
             tokens.set(url, response.body<NativeSession>())
             cookies.clear(Url(url.value).host)
         }
+    }
 
     /** `POST /auth/password-login` → session cookies. Old browser sign-in tokens would win over them, so they go. */
-    suspend fun signIn(url: GatewayUrl, provider: String, username: String, password: String): ApiResult<Unit> =
+    suspend fun signIn(url: GatewayUrl, provider: String, username: String, password: String): ApiResult<Unit> = newCredentials(url) {
         apiCall(isLogin = true) {
             client.post(url.resolve("auth/password-login")) {
                 contentType(ContentType.Application.Json)
                 setBody(PasswordLoginBody(provider, username, password))
             }
         }.map { tokens.set(url, null) }
+    }
 
     /** `GET /api/auth/me` — cheap check that the stored session is still valid. */
     suspend fun me(url: GatewayUrl): ApiResult<AuthUser> =
@@ -104,6 +123,9 @@ class AuthApi(
         }
         cookies.clear(Url(url.value).host)
         tokens.set(url, null)
+        // Fork: no session, so no account it was confirmed to be. A failure here leaves a binding for no credentials,
+        // and the next sign-in sets it to pending first.
+        try { sessionBindings.clear(url) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
     }
 
     suspend fun hasStoredSession(url: GatewayUrl): Boolean = tokens.get(url) != null || cookies.hasCookies(Url(url.value))

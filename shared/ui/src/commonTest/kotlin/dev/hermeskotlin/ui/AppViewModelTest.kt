@@ -13,6 +13,8 @@ import dev.hermeskotlin.core.cache.OfflineDao
 import dev.hermeskotlin.core.cache.OfflineCache
 import dev.hermeskotlin.core.cache.PlainSealer
 import dev.hermeskotlin.core.custom.RetainedCopies
+import dev.hermeskotlin.core.custom.SessionBindings
+import dev.hermeskotlin.core.network.ApiResult
 import kotlin.coroutines.EmptyCoroutineContext
 import dev.hermeskotlin.core.chat.AppLink
 import dev.hermeskotlin.core.chat.DraftStart
@@ -130,6 +132,12 @@ class AppViewModelTest {
                         if (botTransport == null) awaitCancellation()
                         return@addHandler respond("""{"ticket":"T","ttl_seconds":30}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
                     }
+                    if (request.url.encodedPath == "/auth/password-login") {
+                        return@addHandler respond("""{"ok":true}""", HttpStatusCode.OK, headersOf(
+                            HttpHeaders.SetCookie to listOf("hermes_session_at=next; Path=/; HttpOnly"),
+                            HttpHeaders.ContentType to listOf("application/json"),
+                        ))
+                    }
                     if (request.url.encodedPath == "/api/auth/me" && signedInAs != null) {
                         return@addHandler respond("""{"user_id":"$signedInAs","provider":"password"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
                     }
@@ -142,7 +150,9 @@ class AppViewModelTest {
         ),
         cookies,
     )
-    private val auth = AuthApi(client, cookies)
+    // Fork: the session binding is kept in the test's store, as the app keeps it on disk, so a new view model reads
+    // what an earlier one wrote: a relaunch.
+    private val auth = AuthApi(client, cookies, sessionBindings = SessionBindings(store))
     private lateinit var callSettings: SettingsStore
     private var sessionStatus = HttpStatusCode.OK
     private var sessionGate: CompletableDeferred<Unit>? = null
@@ -942,6 +952,113 @@ class AppViewModelTest {
         failMoves = false
         signedInTo(vm, "bob")
         assertNull(savedChat())
+    }
+
+    // Fork: a kept session's saved chats are bound before anything reads them (SessionBindings), offline too.
+
+    /** Alice signed in, her session kept (its cookie) and a chat of hers saved. */
+    private suspend fun TestScope.aliceWithAChat(): AppViewModel {
+        gateways.save(home)
+        val vm = viewModel()
+        signedInTo(vm, "alice")
+        cookies.addCookie(Url(home.url), Cookie("session", "alice"))
+        saveChat("alice's")
+        return vm
+    }
+
+    private suspend fun putAwayWithAlicesChat() =
+        offlineDao.gatewayKeys().filter { RetainedCopies.isPutAway(it, home.gatewayUrl.value) && offlineDao.messages(it, "", "c").isNotEmpty() }
+
+    @Test
+    fun anotherAccountsCredentialsStoredOverTheChatsThenAnOfflineRelaunchShowNothingOfThem() = runTest {
+        aliceWithAChat()
+        // Bob signs in, and the app is killed before the sign-in finishes (onSignedIn never runs).
+        signedInAs = null
+        assertIs<ApiResult.Success<Unit>>(auth.signIn(home.gatewayUrl, "password", "bob", "pw"))
+        assertTrue(auth.hasStoredSession(home.gatewayUrl))
+
+        // Started again offline, on Bob's kept session.
+        val relaunched = viewModel()
+        relaunched.route.first { it is Route.Chat }
+
+        assertNull(savedChat())
+        assertEquals(1, putAwayWithAlicesChat().size)
+        // Online, the gateway says it's Bob: still nothing of Alice's. Alice signing in gets hers back.
+        signedInAs = "bob"
+        viewModel().route.first { it is Route.Chat }
+        until { auth.sessionBindings.owner(home.gatewayUrl) == RetainedCopies.owner("password", "bob") }
+        assertNull(savedChat())
+        signedInTo(relaunched, "alice")
+        assertEquals(listOf("alice's"), savedChat())
+    }
+
+    @Test
+    fun theSameAccountStartingOfflineReadsItsChats() = runTest {
+        aliceWithAChat()
+        signedInAs = null
+
+        val relaunched = viewModel()
+        relaunched.route.first { it is Route.Chat }
+
+        assertEquals(listOf("alice's"), savedChat())
+        assertTrue(putAwayWithAlicesChat().isEmpty())
+    }
+
+    @Test
+    fun aKeptSessionWhoseOtherChatsCantBePutAwayIsSignedOutWithTheNotice() = runTest {
+        aliceWithAChat()
+        signedInAs = null
+        assertIs<ApiResult.Success<Unit>>(auth.signIn(home.gatewayUrl, "password", "bob", "pw"))
+        failMoves = true
+
+        val relaunched = viewModel()
+
+        val route = relaunched.route.first { it is Route.SignIn }
+        assertEquals(SignInNotice.SavedChatsNotPutAway, assertIs<Route.SignIn>(route).notice)
+        assertFalse(auth.hasStoredSession(home.gatewayUrl))
+        // Alice's chat wasn't moved or deleted, and no one is signed in to read it.
+        assertEquals(listOf("alice's"), savedChat())
+    }
+
+    @Test
+    fun aKeptSessionTheGatewaySaysIsAnotherAccountIsSignedOutWhenItsChatsCantBePutAway() = runTest {
+        aliceWithAChat()
+        // The kept session turns out to be Bob's once the gateway answers.
+        signedInAs = "bob"
+        failMoves = true
+
+        val relaunched = viewModel()
+
+        val route = relaunched.route.first { it is Route.SignIn }
+        assertEquals(SignInNotice.SavedChatsNotPutAway, assertIs<Route.SignIn>(route).notice)
+        assertFalse(auth.hasStoredSession(home.gatewayUrl))
+    }
+
+    @Test
+    fun aKeptSessionTheGatewaySaysIsAnotherAccountGetsNoneOfTheChats() = runTest {
+        aliceWithAChat()
+        signedInAs = "bob"
+
+        viewModel().route.first { it is Route.Chat }
+
+        until { savedChat() == null }
+        assertEquals(RetainedCopies.owner("password", "bob"), auth.sessionBindings.owner(home.gatewayUrl))
+        assertEquals(1, putAwayWithAlicesChat().size)
+    }
+
+    @Test
+    fun signingOutForgetsWhichAccountTheSessionWas() = runTest {
+        val vm = aliceWithAChat()
+        assertEquals(RetainedCopies.owner("password", "alice"), auth.sessionBindings.owner(home.gatewayUrl))
+        vm.signOut()
+        vm.awaitSignIn(home)
+        assertNull(auth.sessionBindings.owner(home.gatewayUrl))
+        assertNull(disk.get("fork.session-owner.v1.${home.gatewayUrl.value}"))
+    }
+
+    private suspend fun until(condition: suspend () -> Boolean) {
+        repeat(200) { if (condition()) return; kotlinx.coroutines.delay(10) }
+        assertTrue(condition())
     }
 
     @Test
