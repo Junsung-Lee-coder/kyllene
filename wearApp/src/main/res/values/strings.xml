@@ -132,8 +132,11 @@
     <string name="wear_reader_hermes">Hermes</string>
     <string name="wear_reader_full">Full ›</string>
     <string name="wear_reader_open_full">Open in full</string>
-    <!-- %1$d: parts saved; %2$d: parts in all -->
-    <string name="wear_reader_partial">Saved %1$d of %2$d parts</string>
+    <!-- %1$d: parts saved; %2$d: parts in all (chooses the form) -->
+    <plurals name="wear_reader_partial">
+        <item quantity="one">Saved %1$d of %2$d part</item>
+        <item quantity="other">Saved %1$d of %2$d parts</item>
+    </plurals>
     <string name="wear_reader_get_rest">Get the rest</string>
     <string name="wear_reader_getting_rest">Getting the rest…</string>
     <string name="wear_reader_message_gone">This message isn’t saved here any more.</string>

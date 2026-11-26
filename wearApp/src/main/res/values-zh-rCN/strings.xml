@@ -118,7 +118,9 @@
     <string name="wear_reader_hermes">Hermes</string>
     <string name="wear_reader_full">全文 ›</string>
     <string name="wear_reader_open_full">打开全文</string>
-    <string name="wear_reader_partial">已保存 %1$d/%2$d 部分</string>
+    <plurals name="wear_reader_partial">
+        <item quantity="other">已保存 %1$d/%2$d 部分</item>
+    </plurals>
     <string name="wear_reader_get_rest">获取其余部分</string>
     <string name="wear_reader_getting_rest">正在获取其余部分…</string>
     <string name="wear_reader_message_gone">此消息已不在此处保存。</string>
@@ -131,11 +133,9 @@
     <string name="wear_delete">删除</string>
     <string name="wear_delete_failed">未能删除全部已保存内容。</string>
     <plurals name="wear_saved_chats">
-        <item quantity="one">%1$d 个对话 · %2$s</item>
         <item quantity="other">%1$d 个对话 · %2$s</item>
     </plurals>
     <plurals name="wear_reader_unreadable">
-        <item quantity="one">%1$d 行保存的内容无法读取，已原样保留。</item>
         <item quantity="other">%1$d 行保存的内容无法读取，已原样保留。</item>
     </plurals>
 </resources>

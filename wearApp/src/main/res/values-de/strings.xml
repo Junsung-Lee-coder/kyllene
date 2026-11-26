@@ -118,7 +118,10 @@
     <string name="wear_reader_hermes">Hermes</string>
     <string name="wear_reader_full">Ganz ›</string>
     <string name="wear_reader_open_full">Ganz öffnen</string>
-    <string name="wear_reader_partial">%1$d von %2$d Teilen gespeichert</string>
+    <plurals name="wear_reader_partial">
+        <item quantity="one">%1$d von %2$d Teil gespeichert</item>
+        <item quantity="other">%1$d von %2$d Teilen gespeichert</item>
+    </plurals>
     <string name="wear_reader_get_rest">Rest laden</string>
     <string name="wear_reader_getting_rest">Rest wird geladen…</string>
     <string name="wear_reader_message_gone">Diese Nachricht ist hier nicht mehr gespeichert.</string>

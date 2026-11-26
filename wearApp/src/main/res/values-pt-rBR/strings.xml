@@ -118,7 +118,11 @@
     <string name="wear_reader_hermes">Hermes</string>
     <string name="wear_reader_full">Completa ›</string>
     <string name="wear_reader_open_full">Abrir completa</string>
-    <string name="wear_reader_partial">%1$d de %2$d partes salvas</string>
+    <plurals name="wear_reader_partial">
+        <item quantity="one">%1$d de %2$d parte salva</item>
+        <item quantity="many">%1$d de %2$d de partes salvas</item>
+        <item quantity="other">%1$d de %2$d partes salvas</item>
+    </plurals>
     <string name="wear_reader_get_rest">Buscar o resto</string>
     <string name="wear_reader_getting_rest">Buscando o resto…</string>
     <string name="wear_reader_message_gone">Esta mensagem não está mais salva aqui.</string>
@@ -132,10 +136,12 @@
     <string name="wear_delete_failed">Não foi possível apagar tudo o que foi salvo.</string>
     <plurals name="wear_saved_chats">
         <item quantity="one">%1$d chat · %2$s</item>
+        <item quantity="many">%1$d de chats · %2$s</item>
         <item quantity="other">%1$d chats · %2$s</item>
     </plurals>
     <plurals name="wear_reader_unreadable">
         <item quantity="one">%1$d linha salva não pôde ser lida. Ela é mantida como estava.</item>
+        <item quantity="many">%1$d de linhas salvas não puderam ser lidas. Elas são mantidas como estavam.</item>
         <item quantity="other">%1$d linhas salvas não puderam ser lidas. Elas são mantidas como estavam.</item>
     </plurals>
 </resources>

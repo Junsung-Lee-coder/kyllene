@@ -118,7 +118,11 @@
     <string name="wear_reader_hermes">Hermes</string>
     <string name="wear_reader_full">En entier ›</string>
     <string name="wear_reader_open_full">Ouvrir en entier</string>
-    <string name="wear_reader_partial">%1$d parties sur %2$d enregistrées</string>
+    <plurals name="wear_reader_partial">
+        <item quantity="one">%1$d sur %2$d partie enregistrée</item>
+        <item quantity="many">%1$d sur %2$d de parties enregistrées</item>
+        <item quantity="other">%1$d sur %2$d parties enregistrées</item>
+    </plurals>
     <string name="wear_reader_get_rest">Récupérer la suite</string>
     <string name="wear_reader_getting_rest">Récupération de la suite…</string>
     <string name="wear_reader_message_gone">Ce message n’est plus enregistré ici.</string>
@@ -132,10 +136,12 @@
     <string name="wear_delete_failed">Impossible de tout supprimer.</string>
     <plurals name="wear_saved_chats">
         <item quantity="one">%1$d chat · %2$s</item>
+        <item quantity="many">%1$d de chats · %2$s</item>
         <item quantity="other">%1$d chats · %2$s</item>
     </plurals>
     <plurals name="wear_reader_unreadable">
         <item quantity="one">%1$d ligne enregistrée est illisible. Elle est conservée telle quelle.</item>
+        <item quantity="many">%1$d de lignes enregistrées sont illisibles. Elles sont conservées telles quelles.</item>
         <item quantity="other">%1$d lignes enregistrées sont illisibles. Elles sont conservées telles quelles.</item>
     </plurals>
 </resources>

@@ -118,7 +118,10 @@
     <string name="wear_reader_hermes">Hermes</string>
     <string name="wear_reader_full">Teljes ›</string>
     <string name="wear_reader_open_full">Megnyitás teljesen</string>
-    <string name="wear_reader_partial">%2$d részből %1$d mentve</string>
+    <plurals name="wear_reader_partial">
+        <item quantity="one">%2$d részből %1$d mentve</item>
+        <item quantity="other">%2$d részből %1$d mentve</item>
+    </plurals>
     <string name="wear_reader_get_rest">A többi lekérése</string>
     <string name="wear_reader_getting_rest">A többi lekérése…</string>
     <string name="wear_reader_message_gone">Ez az üzenet már nincs itt mentve.</string>

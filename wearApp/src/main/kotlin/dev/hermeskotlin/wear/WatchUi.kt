@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.annotation.StringRes
 import androidx.compose.ui.semantics.Role
@@ -978,7 +979,7 @@ private fun SavedRow(link: WatchLink) {
     val summary = when (val now = saved) {
         null -> stringResource(R.string.wear_saved_counting)
         else -> if (now.first == 0 && now.second == 0L) stringResource(R.string.wear_saved_none)
-            else context.resources.getQuantityString(R.plurals.wear_saved_chats, now.first, now.first, android.text.format.Formatter.formatShortFileSize(context, now.second))
+            else pluralStringResource(R.plurals.wear_saved_chats, now.first, now.first, android.text.format.Formatter.formatShortFileSize(context, now.second))
     }
     Button(
         onClick = { asking = true },
@@ -1081,7 +1082,7 @@ private fun ReaderScreen(link: WatchLink, store: WatchStore, onMessage: (String)
             }
             if (shown.storageError != null && shown.storageError != WatchReader.DELETE_FAILED) item(key = "storage") { ReaderLine(stringResource(R.string.wear_reader_storage_failed), Danger) }
             if (shown.unreadable > 0) item(key = "unreadable") {
-                ReaderLine(LocalContext.current.resources.getQuantityString(R.plurals.wear_reader_unreadable, shown.unreadable, shown.unreadable), Amber)
+                ReaderLine(pluralStringResource(R.plurals.wear_reader_unreadable, shown.unreadable, shown.unreadable), Amber)
             }
             if (shown.messages.isEmpty() && shown.status != ReaderStatus.Reading) item(key = "empty") { ReaderLine(stringResource(R.string.wear_reader_empty), Muted) }
             shown.messages.forEach { message ->
@@ -1145,7 +1146,7 @@ private fun MessageScreen(link: WatchLink, messageId: String) {
             }
             if (!message.complete) item(key = "rest") {
                 Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    ReaderLine(stringResource(R.string.wear_reader_partial, message.have, message.parts), Amber)
+                    ReaderLine(pluralStringResource(R.plurals.wear_reader_partial, message.parts, message.have, message.parts), Amber)
                     val fetching = state.restFor == messageId && state.restError == null && state.status != ReaderStatus.Offline
                     if (fetching) ReaderLine(stringResource(R.string.wear_reader_getting_rest), Muted)
                     else Button(
