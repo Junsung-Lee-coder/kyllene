@@ -331,6 +331,23 @@ class AndroidSpeechPlayer(
 
     /** Held ([hold]): what plays now is paused, and what's ready meanwhile waits to start. */
     private var holding = false
+
+    /**
+     * Fork: silenced ([silence]): what the chats were playing through went away and the stream now goes to the phone's
+     * speaker, so nothing may make sound: no let-go hold, no new clip or stream, no clip that gets ready, no track
+     * played out. Set under [lock] before the chats are even told; let go only once they've all closed and no playback
+     * that began before then is still running ([releaseMute]), so an old reply's late callback can't sound either.
+     */
+    private var muted = false
+    /** Fork: [play] and [playPcm] calls running now. */
+    private var playing = 0
+    /** Fork: ends the clip being played now, quietly, when it's silenced. */
+    private var endClip: (() -> Unit)? = null
+
+    /** Fork: lets [muted] go once nothing silenced can still sound. Under [lock]. */
+    private fun releaseMute() {
+        if (muted && chatAudioOwners.isEmpty() && playing == 0) muted = false
+    }
     private var track: AudioTrack? = null
     /** A clip once it's ready to play. */
     private var clip: MediaPlayer? = null
@@ -368,6 +385,7 @@ class AndroidSpeechPlayer(
                     runCatching { audioManager.unregisterAudioDeviceCallback(outputsChanged) }
                     runCatching { context.unregisterReceiver(becomingNoisy) }
                     reroute()
+                    releaseMute()
                 }
             }
         }
@@ -411,8 +429,11 @@ class AndroidSpeechPlayer(
 
     /** Fork: stops what plays now, lets the routing go, and collects the chats to tell into [lost]. Under [lock]. */
     private fun silence(lost: MutableList<() -> Unit>) {
+        // First: from here on nothing this player holds or starts makes sound (see [muted]).
+        muted = true
         runCatching { track?.pause(); track?.flush() }
         runCatching { clip?.let { if (it.isPlaying) it.pause() } }
+        endClip?.let { endClip = null; runCatching { it() } }
         restoreChatAudio?.invoke()
         restoreChatAudio = null
         heldRoute = HeadsetAudio.Route.Usual
@@ -482,13 +503,25 @@ class AndroidSpeechPlayer(
     override fun hold(on: Boolean): Boolean {
         synchronized(lock) {
             holding = on
+            // Fork: silenced, a let-go hold stays silent.
+            if (muted && !on) return true
             track?.let { runCatching { if (on) it.pause() else it.play() } }
             clip?.let { runCatching { if (on) { if (it.isPlaying) it.pause() } else if (!it.isPlaying) it.start() } }
         }
         return true
     }
 
-    override suspend fun playPcm(sampleRate: Int, channels: Int, chunks: ReceiveChannel<ByteArray>, onSound: (Boolean) -> Unit) = coroutineScope {
+    override suspend fun playPcm(sampleRate: Int, channels: Int, chunks: ReceiveChannel<ByteArray>, onSound: (Boolean) -> Unit) {
+        // Fork: counted while it runs, so the mute outlasts it; silenced already, it plays nothing.
+        if (!synchronized(lock) { playing++; !muted }) return synchronized(lock) { playing--; releaseMute() }
+        try {
+            streamPcm(sampleRate, channels, chunks, onSound)
+        } finally {
+            synchronized(lock) { playing--; releaseMute() }
+        }
+    }
+
+    private suspend fun streamPcm(sampleRate: Int, channels: Int, chunks: ReceiveChannel<ByteArray>, onSound: (Boolean) -> Unit) = coroutineScope {
         val mask = when (channels) {
             1 -> AudioFormat.CHANNEL_OUT_MONO
             2 -> AudioFormat.CHANNEL_OUT_STEREO
@@ -542,12 +575,14 @@ class AndroidSpeechPlayer(
             withContext(Dispatchers.IO) {
                 synchronized(lock) {
                     this@AndroidSpeechPlayer.track = track
-                    // Held, it fills its buffer and waits to be let go.
-                    if (!holding) track.play()
+                    // Held, it fills its buffer and waits to be let go. Fork: silenced meanwhile, it never plays.
+                    if (!holding && !muted) track.play()
                 }
                 // Provider chunks needn't end on a whole frame; what's left over waits for the next chunk.
                 var carry = ByteArray(0)
                 for (chunk in chunks) {
+                    // Fork: silenced, the rest of the reply isn't written, nor the track played out.
+                    if (synchronized(lock) { muted }) break
                     val bytes = if (carry.isEmpty()) chunk else carry + chunk
                     val usable = bytes.size - bytes.size % frameBytes
                     carry = bytes.copyOfRange(usable, bytes.size)
@@ -561,6 +596,8 @@ class AndroidSpeechPlayer(
                         if (n == 0) delay(WRITE_WAIT_MS)
                     }
                 }
+                // Fork: stopping plays out what the track holds; silenced, it's let go unplayed instead (finally).
+                if (synchronized(lock) { muted }) return@withContext
                 // What the track still holds, counted before stopping: a stopped track's position can read 0, so
                 // waiting for it to catch up would sit through the whole reply's length again in silence.
                 val left = (written.get() - played()).coerceAtLeast(0)
@@ -573,6 +610,7 @@ class AndroidSpeechPlayer(
                 while (draining > 0) {
                     val step = min(draining, DRAIN_STEP_MS)
                     delay(step)
+                    if (synchronized(lock) { muted }) break
                     if (!synchronized(lock) { holding }) draining -= step
                 }
             }
@@ -589,6 +627,16 @@ class AndroidSpeechPlayer(
     }
 
     override suspend fun play(audio: SpokenAudio) {
+        // Fork: counted while it runs, so the mute outlasts it; silenced already, it plays nothing.
+        if (!synchronized(lock) { playing++; !muted }) return synchronized(lock) { playing--; releaseMute() }
+        try {
+            playClip(audio)
+        } finally {
+            synchronized(lock) { playing--; releaseMute() }
+        }
+    }
+
+    private suspend fun playClip(audio: SpokenAudio) {
         val extension = when {
             "ogg" in audio.mimeType || "opus" in audio.mimeType -> "ogg"
             "wav" in audio.mimeType -> "wav"
@@ -617,17 +665,28 @@ class AndroidSpeechPlayer(
                     true
                 }
                 player.setDataSource(file.absolutePath)
+                // Fork: silenced, the clip ends quietly here rather than waiting for a completion that won't come.
+                val endQuietly = { if (continuation.isActive) continuation.resume(Unit) }
                 player.setOnPreparedListener {
                     synchronized(lock) {
+                        // Fork: a clip that's done already (silenced, or cancelled) is never started by a late callback.
+                        if (!continuation.isActive) return@synchronized
                         clip = it
-                        if (!holding) it.start()
+                        when {
+                            muted -> endQuietly()
+                            !holding -> it.start()
+                        }
                     }
                 }
+                synchronized(lock) { endClip = endQuietly }
                 player.prepareAsync()
                 continuation.invokeOnCancellation { runCatching { player.stop() } }
             }
         } finally {
-            synchronized(lock) { if (clip === player) clip = null }
+            synchronized(lock) {
+                if (clip === player) clip = null
+                endClip = null
+            }
             player.release()
             file.delete()
         }

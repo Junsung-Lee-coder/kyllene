@@ -450,12 +450,15 @@ class VoiceController(
      */
     private fun headsetLost(chat: Job?) {
         scope.launch {
-            val why = runCatching { getString(Res.string.voice_error_headset_lost) }.getOrNull() ?: HEADSET_LOST
             if (chat == null || chatJob !== chat) return@launch
-            _chat.update { it.copy(error = why) }
-            chatJob?.cancel()
+            // The chat ends first, its audio closed, before anything suspends; only then is the reason looked up.
+            chat.cancel()
             chatJob = null
             chainedAudio?.let { chainedAudio = null; it() }
+            val why = runCatching { getString(Res.string.voice_error_headset_lost) }.getOrNull() ?: HEADSET_LOST
+            // The chat's own end may have run meanwhile; the reason goes on its final state either way, unless a newer
+            // chat has started since.
+            if (chatJob == null) _chat.update { it.copy(error = why) }
         }
     }
 

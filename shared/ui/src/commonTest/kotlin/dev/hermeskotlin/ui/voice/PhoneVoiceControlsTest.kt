@@ -82,11 +82,16 @@ class PhoneVoiceControlsTest {
         val asked = mutableListOf<Boolean>()
         var lose: (() -> Unit)? = null
         var closed = 0
+        /** Told on the first close, before the count goes up. */
+        var onFirstClose: () -> Unit = {}
         override suspend fun play(audio: SpokenAudio) = Unit
         override fun chainedChatAudio(talkOver: Boolean, onHeadsetLost: () -> Unit): () -> Unit {
             asked += talkOver
             lose = onHeadsetLost
-            return { closed++ }
+            return {
+                if (closed == 0) onFirstClose()
+                closed++
+            }
         }
 
         override fun headsetMicUnavailable() = micUnavailable
@@ -209,10 +214,34 @@ class PhoneVoiceControlsTest {
 
         player.lose!!.invoke()
 
-        val ended = voice.chat.first { it.phase == VoicePhase.Off }
+        // The chat ends first, then gets its reason (looked up after its audio closed).
+        val ended = voice.chat.first { it.phase == VoicePhase.Off && it.error != null }
         assertTrue(ended.error.orEmpty().isNotEmpty(), "the chat says why it ended")
         // The close action is safe to call again, and the chat may (End and its own end): closed at least once.
         assertTrue(player.closed >= 1)
+    }
+
+    @Test
+    fun losingTheEarphonesEndsTheChatBeforeItsReasonIsLookedUpAndANewChatThenRuns() = runTest {
+        val player = EarphonePlayer()
+        val voice = VoiceController(audio(), QuietRecorder(), player, backgroundScope, backgroundScope)
+        voice.startChat(offlineSession(), gateway, null)
+        voice.chat.first { it.phase == VoicePhase.Listening }
+        var errorAtClose: String? = "unset"
+        player.onFirstClose = { errorAtClose = voice.chat.value.error }
+
+        player.lose!!.invoke()
+        val ended = voice.chat.first { it.phase == VoicePhase.Off && it.error != null }
+
+        // The chat's audio was closed before the (suspending) reason lookup set its error.
+        assertNull(errorAtClose)
+        assertTrue(ended.error!!.isNotEmpty())
+        // A new chat starts and listens as usual, its error line clear.
+        voice.startChat(offlineSession(), gateway, null)
+        val again = voice.chat.first { it.phase == VoicePhase.Listening }
+        assertNull(again.error)
+        assertEquals(listOf(false, false), player.asked)
+        voice.stopChat()
     }
 
     /**
@@ -266,7 +295,8 @@ class PhoneVoiceControlsTest {
 
         player.outputs(phoneOnly)
 
-        val ended = voice.chat.first { it.phase == VoicePhase.Off }
+        // The chat ends first, then gets its reason (looked up after its audio closed).
+        val ended = voice.chat.first { it.phase == VoicePhase.Off && it.error != null }
         assertTrue(ended.error.orEmpty().isNotEmpty(), "the chat says why it ended")
         assertEquals(1, player.stopped)
         assertFalse(HeadsetAudio.Route.Speaker in player.routes, "never on the speaker: ${player.routes}")
