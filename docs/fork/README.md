@@ -32,25 +32,40 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
    - saves a row too big for one database row whole, as ordered pieces;
    - keeps every list entry, with the chats the gateway stops listing after the ones it lists;
    - keeps the copy of a chat the gateway no longer has (the chat still shows as gone);
-   - on signing out or removing a gateway, moves its copies under a `detached:` key that no gateway address can be.
-     Whoever signs in next, to it or another, doesn't see them; they stay on the device. Reading them again isn't
-     built yet;
+   - keeps copies for the account they were read for. Each sign-in checks the account the gateway verifies
+     (`GET /api/auth/me`: `provider` and `user_id`) and records it, sealed, with the gateway's copies:
+     - copies of another account, or of no known account (saved before this, or while the account couldn't be
+       verified), are moved under a `detached:` key that no gateway address can be, before anything reads them;
+     - copies detached for the account signing in come back, under what it read since;
+     - signing out or removing a gateway detaches its copies too, so the same account gets them back when it signs
+       in again;
+     - if the copies can't be detached, the sign-in doesn't go on: the new session is signed out again and the
+       sign-in screen says why;
+     - a session kept from before is checked the same way once the gateway answers;
+   - sets aside a saved row, piece or list entry that no longer reads (under an `unreadable:` key, unchanged), and
+     saves the readable rest; it never drops the readable rows with it;
    - shows a copy that couldn't be written with the chat's existing error banner, or the list's existing message.
      What was saved before stays.
 
-   Deleting a chat or a bot still drops its copies.
+   Deleting a chat or a bot still drops its copies, and so does deleting a chat the gateway no longer has (404).
+   `OfflineCache.forgetPutAway` deletes detached and unreadable copies, per gateway or all; no screen calls it yet.
    - The merge, piece and key rules are in `shared/core/.../custom/RetainedCopies.kt`.
-   - `OfflineCache.kt` calls them in `saveList`, `savedTranscript` and `saveTranscript`, and adds `detachGateway`.
-   - `OfflineDatabase.kt` adds `moveGateway` and `transcriptGateways` queries. There is no new table or column, so
-     the schema version is unchanged. A version bump would wipe the cache, because it uses
+   - `OfflineCache.kt` calls them in `saveList`, `savedTranscript` and `saveTranscript`, and adds `detachGateway`,
+     `bindOwner` and `forgetPutAway`. Its writes take one lock, so a save can't straddle a detach.
+   - `OfflineDatabase.kt` adds queries (moving, listing and setting aside a gateway key's rows). The owner record
+     is a saved "chat" under a profile no gateway profile can be named. There is no new table or column, so the
+     schema version is unchanged. A version bump would wipe the cache, because it uses
      `fallbackToDestructiveMigration`.
    - `ChatSession.kt` no longer calls `forgetChat` on a 404, saves older pages, and reports a failed write.
-     `SessionsViewModel.kt` reports a failed list write. `AppViewModel.kt` calls `detachGateway` where it called
-     `forgetGateway`.
+     `SessionsViewModel.kt` reports a failed list write and treats a 404 on delete as deleted. `AppViewModel.kt`
+     calls `detachGateway` where it called `forgetGateway`, and `bindOwner` in `onSignedIn` (and, once verified, for
+     a kept session in `init` and `open`). `SignInNotice.SavedChatsNotPutAway` has a new string
+     (`app_sign_in_saved_chats_not_put_away`, in every language).
    - Tests: `cache/RetainedCopiesTest.kt` (through `ChatSession`) and `jvmTest/.../RetainedCopiesDatabaseTest.kt`
      (the real Room database and AES sealer, across a reopen). These stock tests change to match: five in
      `OfflineCacheTest` that checked the trimming are removed; `ChatSessionTest`, `SessionsViewModelTest` and
-     `AppViewModelTest` expect the copies kept or detached; `SessionsViewModelTest` adds the failed-write case.
+     `AppViewModelTest` expect the copies kept or detached; `SessionsViewModelTest` adds the failed-write and 404
+     cases; `AppViewModelTest` adds expiry, re-sign-in, unknown-owner and failed-detach cases.
 3. **Voice from the watch goes to the default conversation.** A watch ask or live call with no conversation chosen
    goes to the existing session set as the Default Call Target (Settings → Voice), not to a new chat. These keep
    stock behaviour:
@@ -88,8 +103,12 @@ For each conflict or failing test:
 - **`OfflineCache`.** If upstream changed how it saves or trims copies, keep their change and drop only the parts
   that remove received rows, list entries or chats because of their count, age or size. Saves must still go through
   `RetainedCopies.mergeRows`/`mergeList`, writes through `split`, and reads through `join`.
-- **Deletions.** Wherever upstream deletes saved copies, keep only what the person asked for: deleting a chat or a
-  bot. A 404 must not delete anything. Signing out and removing a gateway must call `detachGateway`.
+- **Deletions.** Wherever upstream deletes saved copies, keep only what the person asked for: deleting a chat (also
+  one the gateway answers 404 for) or a bot. A 404 on reading must not delete anything. Signing out and removing a
+  gateway must call `detachGateway`.
+- **Sign-in.** Every path that finishes a sign-in must call `bindOwner` before anything reads the cache, and must not
+  go on when it returns false. If upstream changes `/api/auth/me` or how accounts are named, keep the owner as
+  provider and user id.
 - **The database.** If upstream bumps the cache database version, add a real migration or the copies are wiped. Keep
   the fork's DAO queries.
 - `SavedChatsKeptTest`, `SavedChatsKeptDatabaseTest`, `RetainedCopiesTest` and `RetainedCopiesDatabaseTest` must
