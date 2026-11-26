@@ -4,6 +4,7 @@ import dev.hermeskotlin.core.auth.AuthApi
 import dev.hermeskotlin.core.auth.BrowserSignIn
 import dev.hermeskotlin.core.auth.NativeTokens
 import dev.hermeskotlin.core.custom.SessionBindings
+import dev.hermeskotlin.core.custom.SpeechGate
 import dev.hermeskotlin.core.auth.PersistentCookiesStorage
 import dev.hermeskotlin.core.auth.WebCookieJar
 import dev.hermeskotlin.core.cache.OfflineCache
@@ -94,6 +95,11 @@ val coreModule = module {
         ConnectionCheck(get(), get(), openSocket = { url, ticket -> client.openGatewaySocket(url, ticket) })
     }
     single { SessionBindings(get()) }
+    // Fork: the latest input decides whether replies are read aloud automatically (requirements §6.1).
+    single {
+        val bindings = get<SessionBindings>()
+        SpeechGate { gateway -> bindings.owner(gateway) }
+    }
     single { AuthApi(get(), get(), get(), get()) }
     single { BrowserSignIn(get(), get()) }
     single { GatewayRepository(get()) }

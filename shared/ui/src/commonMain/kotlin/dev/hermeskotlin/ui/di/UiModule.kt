@@ -60,6 +60,7 @@ val uiModule = module {
             nextPromptApi = get(),
             readAloudKeepAlive = getOrNull(),
             liveTranscripts = getOrNull(),
+            speechGate = getOrNull(),
         )
     }
     // A chat in a window of its own (the desktop's Open in new window), with the host it's handed: the app's one
@@ -76,6 +77,7 @@ val uiModule = module {
             nextPromptApi = get(),
             readAloudKeepAlive = getOrNull(),
             liveTranscripts = getOrNull(),
+            speechGate = getOrNull(),
         )
     }
     viewModelOf(::SettingsViewModel)

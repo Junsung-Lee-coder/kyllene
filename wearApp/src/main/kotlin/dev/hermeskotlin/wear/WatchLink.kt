@@ -635,15 +635,23 @@ class WatchLink(
 
     private fun onReply(update: ReplyUpdate) {
         var taken = false
+        var wasVoiced = false
         _turn.update { now ->
             taken = false
             // Only the ask on screen, and never an older update over a newer one.
             if (now == null || update.askId != now.askId || update.seq <= now.update.seq) return@update now
             if (!now.running && update.phase != ReplyPhase.Done) return@update now
             taken = true
+            wasVoiced = now.update.speech != ReplySpeech.Off
             now.copy(update = update)
         }
         if (!taken) return
+        // Fork: the phone took the reply's voice back (text was sent on the phone since the ask): what plays stops,
+        // and clips still on their way are dropped.
+        if (wasVoiced && update.speech == ReplySpeech.Off && update.phase == ReplyPhase.Done) {
+            silenced = update.askId
+            scope.launch(main) { speech.stop() }
+        }
         _phone.value = PhoneState.Ready
         update.chatId?.let { store.adoptChat(it, update.title ?: store.chat.value.title, update.scope) }
         store.setStats(update.model, update.contextPercent)

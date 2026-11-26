@@ -22,7 +22,8 @@ val wearModule = module {
     single<WatchOutbox> { RoutingOutbox(PhoneOutbox(androidContext()), get()) }
     single { PebbleRequests(get(), get(), get(), get(), get()) }
     single { PebbleRinger(androidContext(), get(), get(), get(), get()) }
-    single { WatchRelay(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), CatalogueWatchCallWords) }
+    // Fork: a watch's spoken ask is a voice request; its reply isn't read after text sent on the phone (SpeechGate).
+    single { WatchRelay(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), CatalogueWatchCallWords, speechGate = get()) }
     // Fork: the watch's live calls are kept with the phone's (LiveTranscripts).
     single { WatchCalls(get(), get(), get(), get(), get(), transcripts = get()) }
     single { WearRequests(get(), get()) }
@@ -31,5 +32,5 @@ val wearModule = module {
     single { WatchAccentSync(androidContext(), get(), get()) }
     // A call for an answer picked up on the phone holds its chat as a call from the watch does.
     // Fork: spelled out, for the live transcripts it keeps.
-    viewModel { PhoneCallModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), liveTranscripts = get()) }
+    viewModel { PhoneCallModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), liveTranscripts = get(), speechGate = get()) }
 }

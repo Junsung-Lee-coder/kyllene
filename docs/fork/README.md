@@ -215,6 +215,31 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      call's history only in the same account and session).
    - Not covered: a transcript browser, and anything the gateway itself keeps.
 
+7. **Text sent on the phone silences automatic speech until the next spoken request.**
+   - Each spoken request takes its place among the inputs when it's sent: the phone's voice chat or Talk sending what
+     was said (or a spoken answer to Hermes's question), and every watch ask (the watch has no keyboard; its asks are
+     recorded, or written down by the watch's speech recognizer). Text sent from the phone's chat (Send, an edited
+     prompt resent, a prompt picked; not a slash command) is an input too (`SpeechGate`).
+   - A reply is read aloud automatically only if no text was sent after its request, in the same gateway and account.
+     Text stops what's being read now (on the phone at once, as Skip does; on the watch, which is told the reply has no
+     voice after all, and gets no more clips), and every earlier request's reply stays silent however late it comes.
+     A later spoken request's replies are read; nothing silenced is read afterwards. A reply finishing, failing or
+     being cancelled changes nothing, and neither do opening or reading a chat, reconnecting, settings or the
+     gateway's events. One account's or gateway's text never silences another's.
+   - Read aloud, pressed by hand, is never silenced. Live calls aren't changed: their voice is the call itself, and
+     Hang up ends it. What the voice chat says that isn't a reply (an agent call's opener, a question asked aloud) is
+     stopped by text while it plays, like a reply, but isn't held back otherwise. In memory only: a reply can't
+     outlive the app's process.
+   - Code: `core/custom/SpeechGate.kt`, its `CoreModule` single; `VoiceController` (`speechGate`, a ticket per spoken
+     request, the check before a reply is voiced as it's written or after, and text stopping the reading),
+     `ChatViewModel.textSent`, `WatchRelay.answer`/`speak` (a ticket per ask, no clips after text, the watch told),
+     the watch's `WatchLink.onReply` (a reply's voice taken back stops it), and `PhoneCallModel`, `UiModule`,
+     `WearModule` passing it.
+   - Tests: `core/custom/SpeechGateTest.kt`, `core/wear/WatchSpeechGateTest.kt` (the real `WatchRelay` and a fake
+     gateway: a late watch reply silent, voiced again only for a new ask, stopped mid-clips, another account's text
+     ignored) and `ui/voice/SpeechPolicyTest.kt` (the real controller in Talk: late reply silent, reading stopped,
+     a new request read once, other account and gateway, no gate as before).
+
 The fork adds two switches to Settings › Voice and the Ready state to the voice panel; it doesn't otherwise change
 the settings screens or layout. The watch app changes only as described above.
 
@@ -264,6 +289,9 @@ For each conflict or failing test:
 - **Live transcripts.** Wherever upstream builds `LiveConversation`, pass `recording` (begun for the chat's gateway and
   stored session) and `earlier`. Keep `LiveTranscriptDatabase` its own file; if its table changes, add a real
   migration (it has no destructive fallback). If upstream keeps live transcripts itself, compare before dropping these.
+- **Speech after text.** Keep `textSent()` in every path upstream adds for sending typed text, the ticket where
+  `converseOnce` sends and `askAloud` answers, the `mayRead()` checks before a reply is voiced, and the ticket and
+  `voicing` check in `WatchRelay.answer`.
 - **Talk.** If upstream changes `startChat`, `hear` or `converseOnce`, keep the `mode` branch before the live check,
   `awaitTalk()` at the top of `hear`'s loop, and `MANUAL_TALK` for Talk's recordings. If it adds a `VoicePhase`, give
   it a place in `voicePress` and the panel's label. If upstream adds its own Live switch, use theirs and drop

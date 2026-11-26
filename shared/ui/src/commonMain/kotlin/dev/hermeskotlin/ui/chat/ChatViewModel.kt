@@ -49,6 +49,7 @@ import dev.hermeskotlin.core.sessions.CaughtUp
 import dev.hermeskotlin.core.sessions.SeenStore
 import dev.hermeskotlin.core.sessions.SessionsApi
 import dev.hermeskotlin.core.custom.LiveTranscripts
+import dev.hermeskotlin.core.custom.SpeechGate
 import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.core.settings.AppSettings
 import dev.hermeskotlin.core.settings.RunningSend
@@ -249,6 +250,8 @@ class ChatViewModel(
     readAloudKeepAlive: ReadAloudKeepAlive? = null,
     /** Fork: live call transcripts kept on the phone; none where the platform keeps none. */
     liveTranscripts: LiveTranscripts? = null,
+    /** Fork: text sent here silences automatic speech of earlier voice requests (requirements §6.1). */
+    private val speechGate: SpeechGate? = null,
 ) : ViewModel(), ChatActions {
 
     /** Dictation, voice chat and Read aloud for the open chat. */
@@ -260,6 +263,7 @@ class ChatViewModel(
         readAloudVoices = readAloudVoices ?: InMemoryReadAloudVoices(),
         readAloudKeepAlive = readAloudKeepAlive,
         liveTranscripts = liveTranscripts,
+        speechGate = speechGate,
     )
 
     /** The profile's pet and its gallery. */
@@ -1260,7 +1264,10 @@ class ChatViewModel(
         val attachments = _attachments.value
         val comments = _comments.value
         if (text.isBlank() && attachments.isEmpty() && comments.isEmpty()) return
-        _editing.value?.let { key -> return sendEdit(chat, key, text, comments) }
+        _editing.value?.let { key ->
+            textSent()
+            return sendEdit(chat, key, text, comments)
+        }
         val command = SlashCommand.parse(text.trim())
         // Commands run at once either way; they never become a turn to queue. Waiting comments stay for the next prompt.
         if (command != null && attachments.isEmpty()) {
@@ -1269,6 +1276,8 @@ class ChatViewModel(
             runCommand(chat, command)
             return
         }
+        // Fork: a message typed and sent (a slash command isn't one).
+        textSent()
         composer.clearText()
         _attachments.value = emptyList()
         _comments.value = emptyList()
@@ -1299,6 +1308,8 @@ class ChatViewModel(
     override fun sendPrompt(text: String) {
         val chat = session.value ?: return
         if (text.isBlank()) return
+        // Fork: a prompt picked and sent is text too.
+        textSent()
         val running = sendModeFor(state.value.running, null, settings.settings.value?.runningSend, withAttachments = false)
         viewModelScope.launch {
             val outcome = when (running) {
@@ -1309,6 +1320,16 @@ class ChatViewModel(
             }
             if (outcome == SendOutcome.NotSent) giveBack(text)
         }
+    }
+
+    /**
+     * Fork: the person sent text in this chat's gateway: automatic speech there stops, and replies to earlier voice
+     * requests stay silent (SpeechGate). Only sending counts, never opening, reading or reconnecting a chat.
+     */
+    private fun textSent() {
+        val gate = speechGate ?: return
+        val gateway = target?.gateway?.gatewayUrl ?: return
+        viewModelScope.launch { gate.textInput(gateway) }
     }
 
     override fun interrupt() {

@@ -6,6 +6,7 @@ import dev.hermeskotlin.core.chat.InputRequest
 import dev.hermeskotlin.core.phone.AgentCall
 import dev.hermeskotlin.core.phone.CallOutcome
 import dev.hermeskotlin.core.custom.LiveTranscripts
+import dev.hermeskotlin.core.custom.SpeechGate
 import dev.hermeskotlin.core.settings.AppSettings
 import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.core.voice.AudioApi
@@ -69,8 +70,10 @@ class PhoneCallModel(
     deviceLock: DeviceLock,
     /** Fork: live call transcripts kept on the phone (LiveTranscripts). */
     liveTranscripts: LiveTranscripts? = null,
+    /** Fork: text sent on the phone silences automatic speech of earlier voice requests (SpeechGate). */
+    speechGate: SpeechGate? = null,
 ) : ViewModel() {
-    val voice = VoiceController(audio, recorder, player, viewModelScope, appScope, keepAlive, liveCalls = liveCalls, deviceLock = deviceLock, liveTranscripts = liveTranscripts)
+    val voice = VoiceController(audio, recorder, player, viewModelScope, appScope, keepAlive, liveCalls = liveCalls, deviceLock = deviceLock, liveTranscripts = liveTranscripts, speechGate = speechGate)
 
     private val _state = MutableStateFlow<PhoneCallState?>(null)
     val state: StateFlow<PhoneCallState?> = _state.asStateFlow()

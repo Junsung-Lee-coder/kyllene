@@ -20,6 +20,7 @@ import dev.hermeskotlin.core.voice.DeviceDictation
 import dev.hermeskotlin.core.voice.DeviceDictationUnavailable
 import dev.hermeskotlin.core.voice.LiveCalls
 import dev.hermeskotlin.core.custom.LiveTranscripts
+import dev.hermeskotlin.core.custom.SpeechGate
 import dev.hermeskotlin.core.voice.ReadAloudVoices
 import dev.hermeskotlin.core.voice.InMemoryReadAloudVoices
 import dev.hermeskotlin.core.voice.ReadAloudControls
@@ -158,6 +159,8 @@ class VoiceController(
     private val readAloudKeepAlive: ReadAloudKeepAlive? = null,
     /** Fork: live call transcripts kept on the phone, and given to the session's next call (LiveTranscripts). */
     private val liveTranscripts: LiveTranscripts? = null,
+    /** Fork: text sent after a voice request silences its reply (requirements §6.1); null reads every reply. */
+    private val speechGate: SpeechGate? = null,
     private val liveCalls: LiveCalls? = null,
 ) {
     private val _chat = MutableStateFlow(VoiceChatState())
@@ -243,6 +246,22 @@ class VoiceController(
     private var talkTurn: Job? = null
     /** Fork: whether Talk stays Ready, holding the microphone service and the button, with Herald out of sight. */
     private var readyAway: () -> Boolean = { false }
+    /** Fork: the voice request this chat sent last, whose reply is read only if no text was sent after it (SpeechGate). */
+    private var replyTicket: SpeechGate.Ticket? = null
+
+    /** Fork: whether the reply to the last voice request may be read aloud now. */
+    private fun mayRead(): Boolean = speechGate?.allows(replyTicket) ?: true
+
+    /**
+     * Fork: while a chained chat or Talk runs in [gateway], text sent there stops what's being read, as Skip does;
+     * the reply's rest isn't read ([mayRead]). The returned action stops listening.
+     */
+    private suspend fun stopReadingOnText(gateway: GatewayUrl): () -> Unit {
+        val gate = speechGate ?: return {}
+        val scope = gate.scope(gateway)
+        return gate.onText { if (it == scope) speechJob?.cancel() }
+    }
+
     /** Fork: what the chat's end says even when the person ended it: a live call's transcript tail left unsaved. */
     private var endNotice: String? = null
     /** Fork: Send was asked for this Talk recording; told to the recorder again once it's running. */
@@ -379,6 +398,8 @@ class VoiceController(
         // Fork: every chained chat asks, talk-over on or not, so earphones with a microphone take it as a live call
         // takes them, and a pair that goes away ends it rather than moving it to the speaker (HeadsetAudio).
         val chat = chatJob
+        val unwatch = stopReadingOnText(gateway)
+        coroutineContext.job.invokeOnCompletion { unwatch() }
         val closeAudio: () -> Unit = player.chainedChatAudio(settings.await().enabled) { headsetLost(chat) }
         chainedAudio = closeAudio
         if (player.headsetMicUnavailable()) {
@@ -457,6 +478,8 @@ class VoiceController(
      * requests nothing is routed, so music and calls have the audio as usual.
      */
     private suspend fun converseManual(session: ChatSession, gateway: GatewayUrl, profile: String?) = coroutineScope {
+        val unwatch = stopReadingOnText(gateway)
+        coroutineContext.job.invokeOnCompletion { unwatch() }
         appScope.launch { audio.ttsLease(gateway, active = true, profile) }
         val presses = Channel<Unit>(Channel.CONFLATED)
         talkPresses = presses
@@ -691,6 +714,8 @@ class VoiceController(
         }
 
         _chat.update { it.copy(phase = VoicePhase.Thinking, caption = transcript.trim(), captionIsVoice = false) }
+        // Fork: a voice request: its reply is read unless text is sent after it (SpeechGate).
+        speechGate?.let { replyTicket = it.voiceInput(gateway) }
         val sentAt = session.state.value.messages.size
         voicedSoFar = ""
         voicedUntilAsked = false
@@ -730,6 +755,11 @@ class VoiceController(
             withTimeoutOrNull(TURN_START_MS) { session.state.first { it.running } }
             val stream = opening.await()
             handedOver = true
+            // Fork: text was sent since: nothing of this reply is voiced, as it's written or after.
+            if (!mayRead()) {
+                withContext(NonCancellable) { runCatching { stream?.close() } }
+                return Voiced.No
+            }
             // Voiced while it's written where the gateway can; otherwise read out once it's done.
             return speakAsWritten(stream, session, sentAt)
         } finally {
@@ -958,7 +988,8 @@ class VoiceController(
             streamed -> speakableText(unsentSpeech(voicedSoFar, speakableSoFar(replyText(messages, from), complete = true)))
             else -> (messages.drop(from).lastOrNull { it is ChatMessage.Assistant } as? ChatMessage.Assistant)?.text?.let(::speakableText).orEmpty()
         }.trim()
-        if (text.isEmpty()) return Turn.Done
+        // Fork: text was sent since the request: its reply isn't read (SpeechGate).
+        if (text.isEmpty() || !mayRead()) return Turn.Done
 
         // An error left from asking (an unclear last try, answered elsewhere after) isn't this reading's.
         _chat.update { it.copy(phase = VoicePhase.Speaking, caption = text, captionIsVoice = true, error = null) }
@@ -1091,6 +1122,8 @@ class VoiceController(
         if (answeredElsewhere(session, request)) return true
         // The phone locked while it was asked: whoever is near it doesn't get to approve. It's asked again unlocked.
         if (request is InputRequest.Approval && deviceLock.locked()) return true
+        // Fork: a spoken answer is a voice request too: what Hermes says next is read unless text follows.
+        speechGate?.let { replyTicket = it.voiceInput(gateway) }
         if (!session.answer(request, answer)) {
             _chat.update { it.copy(error = session.state.value.error ?: getString(Res.string.voice_error_send_answer)) }
             return false

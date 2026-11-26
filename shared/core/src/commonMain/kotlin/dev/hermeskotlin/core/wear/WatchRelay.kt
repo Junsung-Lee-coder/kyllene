@@ -13,6 +13,7 @@ import dev.hermeskotlin.core.chat.toolInProgress
 import dev.hermeskotlin.core.connection.ConnectionState
 import dev.hermeskotlin.core.connection.GatewayConnection
 import dev.hermeskotlin.core.custom.DefaultVoiceConversation
+import dev.hermeskotlin.core.custom.SpeechGate
 import dev.hermeskotlin.core.gateway.GatewayRepository
 import dev.hermeskotlin.core.gateway.GatewayUrl
 import dev.hermeskotlin.core.models.displayModelName
@@ -106,7 +107,12 @@ class WatchRelay(
     private val botChats: BotChats,
     private val settings: SettingsStore,
     private val words: WatchCallWords = WatchCallWords.English,
+    /** Fork: text sent on the phone silences a watch ask's reply voice (requirements §6.1); null voices every one. */
+    private val speechGate: SpeechGate? = null,
 ) {
+    /** Fork: stops listening for text that silences the last ask's voice; replaced by the next ask. */
+    private val watchSpeechWatch = AtomicReference<(() -> Unit)?>(null)
+
     private val scope = CoroutineScope(appScope.coroutineContext + SupervisorJob(appScope.coroutineContext[Job]))
 
     private val _busy = MutableStateFlow(false)
@@ -562,6 +568,11 @@ class WatchRelay(
             return fail(SIGNED_OUT)
         }
         val gateway = saved.gatewayUrl
+        // Fork: every watch ask is spoken (the watch has no keyboard): a voice request, whose reply is voiced unless
+        // text is sent on the phone after it. The last ask's voice no longer listens for that.
+        watchSpeechWatch.exchange(null)?.invoke()
+        val ticket = speechGate?.voiceInput(gateway)
+        val voicing = { speechGate?.allows(ticket) ?: true }
         val botProfile = ask.botProfile
         val owner = ask.scope
         if (owner != null && (owner.gateway != gateway.value || botProfile != null && owner.profile != botProfile)) {
@@ -648,9 +659,18 @@ class WatchRelay(
         }
         val replyText = reply?.text.orEmpty()
         // Only punctuation left ("?!", say) has no words to voice and makes no pieces: nothing to read, not "coming".
-        val spoken = if (ask.speak && reply?.outcome != TurnOutcome.Interrupted) speakableText(replyText).takeIf(::hasWordsToSay).orEmpty() else ""
+        // Fork: not voiced when text was sent on the phone since the ask (SpeechGate).
+        val spoken = if (ask.speak && reply?.outcome != TurnOutcome.Interrupted && voicing()) speakableText(replyText).takeIf(::hasWordsToSay).orEmpty() else ""
         tell(done.copy(phase = ReplyPhase.Done, text = clipForWatch(replyText), speech = if (spoken.isEmpty()) ReplySpeech.Off else ReplySpeech.Coming))
-        if (spoken.isNotEmpty() && !speak(node, ask.id, spoken, gateway, profile)) {
+        if (spoken.isEmpty()) return
+        // Fork: text sent on the phone while it's voiced (in clips, or by the watch's own voice) stops it there: the
+        // watch is told the reply has no voice after all, once.
+        speechGate?.let { gate ->
+            val gated = gate.scope(gateway)
+            var told = false
+            watchSpeechWatch.exchange(gate.onText { if (it == gated && !told) { told = true; scope.launch { tell(last.copy(speech = ReplySpeech.Off)) } } })?.invoke()
+        }
+        if (!speak(node, ask.id, spoken, gateway, profile, voicing) && voicing()) {
             tell(last.copy(speech = ReplySpeech.Unavailable))
         }
     }
@@ -659,7 +679,7 @@ class WatchRelay(
      * Voices [text] in the gateway's voice, clip by clip, each sent as soon as it's made so the first plays
      * while the rest are made. False when not even the first could be made or sent: the watch reads it itself.
      */
-    private suspend fun speak(node: String, askId: String, text: String, gateway: GatewayUrl, profile: String?): Boolean {
+    private suspend fun speak(node: String, askId: String, text: String, gateway: GatewayUrl, profile: String?, voicing: () -> Boolean = { true }): Boolean {
         // Not waited on: the first clip shouldn't wait for it. Let go even when the watch stops the voice
         // (the turn cancelled), after the lease itself has gone out.
         val lease = scope.launch { audio.ttsLease(gateway, true, profile) }
@@ -668,6 +688,8 @@ class WatchRelay(
             // stops waiting 20 s after a clip ends.
             val chunks = speechChunks(text, maxChars = WATCH_SPEECH_CHARS)
             chunks.forEachIndexed { index, chunk ->
+                // Fork: text sent on the phone meanwhile: no more clips.
+                if (!voicing()) return true
                 val clip = when (val result = audio.speak(gateway, chunk, profile)) {
                     is ApiResult.Success -> result.value
                     else -> return index > 0
