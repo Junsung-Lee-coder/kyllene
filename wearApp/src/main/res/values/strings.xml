@@ -157,4 +157,9 @@
         <item quantity="one">%1$d saved line couldn’t be read. It’s kept as it was.</item>
         <item quantity="other">%1$d saved lines couldn’t be read. They’re kept as they were.</item>
     </plurals>
+    <!-- Fork: a live call ended on silence; %1$d: the setting, in seconds -->
+    <plurals name="wear_call_ended_silence">
+        <item quantity="one">Call ended after %1$d second of silence.</item>
+        <item quantity="other">Call ended after %1$d seconds of silence.</item>
+    </plurals>
 </resources>

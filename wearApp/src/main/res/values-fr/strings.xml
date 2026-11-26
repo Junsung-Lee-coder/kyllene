@@ -144,4 +144,9 @@
         <item quantity="many">%1$d de lignes enregistrées sont illisibles. Elles sont conservées telles quelles.</item>
         <item quantity="other">%1$d lignes enregistrées sont illisibles. Elles sont conservées telles quelles.</item>
     </plurals>
+    <plurals name="wear_call_ended_silence">
+        <item quantity="one">Appel terminé après %1$d seconde de silence.</item>
+        <item quantity="many">Appel terminé après %1$d de secondes de silence.</item>
+        <item quantity="other">Appel terminé après %1$d secondes de silence.</item>
+    </plurals>
 </resources>

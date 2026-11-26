@@ -94,4 +94,15 @@
     <string name="voice_error_transcript_unreadable">No se pudo leer parte de una transcripción anterior de llamada en directo de este chat. Se conserva tal cual en el teléfono.</string>
     <string name="voice_error_transcript_tail_unsaved">El final de la transcripción de esta llamada no se pudo guardar en el teléfono.</string>
     <string name="voice_error_live_text">La llamada en directo terminó porque enviaste un mensaje.</string>
+    <string name="settings_phone_live_silence">Silencio de Phone Live</string>
+    <string name="settings_watch_live_silence">Silencio de Watch Live</string>
+    <string name="settings_live_silence_range">1–60 segundos</string>
+    <string name="settings_live_silence_unit">segundos</string>
+    <string name="settings_live_silence_detail">Termina una llamada en directo tras un silencio. La voz y la reproducción de voz reinician el temporizador. La duración total de la llamada sigue sin límite. Los cambios se aplican a las llamadas nuevas.</string>
+    <string name="settings_live_silence_error">Introduce un número entero del 1 al 60. Se mantiene el valor guardado.</string>
+    <plurals name="voice_error_live_silence">
+        <item quantity="one">La llamada en directo terminó tras %1$d segundo de silencio.</item>
+        <item quantity="many">La llamada en directo terminó tras %1$d de segundos de silencio.</item>
+        <item quantity="other">La llamada en directo terminó tras %1$d segundos de silencio.</item>
+    </plurals>
 </resources>

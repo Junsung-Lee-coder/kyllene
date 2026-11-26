@@ -214,6 +214,12 @@ interface LiveCall {
     /** The microphone level, 0..1; polled. */
     fun micLevel(): Float
 
+    /**
+     * Fork: the call's media link is up: false while WebRTC reports it disconnected (a network stall it may recover
+     * from). Failed or closed, the call ends anyway. Polled.
+     */
+    fun linked(): Boolean = true
+
     fun setMuted(muted: Boolean)
 
     /** Hangs up and frees the microphone and speaker. Safe to call more than once. */

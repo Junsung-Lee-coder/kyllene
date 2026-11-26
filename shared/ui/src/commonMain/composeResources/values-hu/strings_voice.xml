@@ -94,4 +94,14 @@
     <string name="voice_error_transcript_unreadable">A csevegés egy korábbi élő hívásának átiratából egy rész nem olvasható. Változatlanul a telefonon marad.</string>
     <string name="voice_error_transcript_tail_unsaved">A hívás átiratának vége nem menthető a telefonra.</string>
     <string name="voice_error_live_text">Az élő hívás véget ért, mert üzenetet küldtél.</string>
+    <string name="settings_phone_live_silence">Phone Live csend</string>
+    <string name="settings_watch_live_silence">Watch Live csend</string>
+    <string name="settings_live_silence_range">1–60 másodperc</string>
+    <string name="settings_live_silence_unit">másodperc</string>
+    <string name="settings_live_silence_detail">Csend után befejezi az élő hívást. A beszéd és a hang lejátszása újraindítja az időzítőt. A hívás teljes hossza továbbra is korlátlan. A változások az új hívásokra érvényesek.</string>
+    <string name="settings_live_silence_error">Adj meg egy egész számot 1 és 60 között. A mentett érték megmarad.</string>
+    <plurals name="voice_error_live_silence">
+        <item quantity="one">Az élő hívás %1$d másodperc csend után véget ért.</item>
+        <item quantity="other">Az élő hívás %1$d másodperc csend után véget ért.</item>
+    </plurals>
 </resources>

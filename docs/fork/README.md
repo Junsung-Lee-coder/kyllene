@@ -314,7 +314,54 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      (`SpeechOut` on Robolectric's MediaPlayer: preparing, playing, between clips, stopped; a clip plays on while the
      orb is still). How smooth it looks and what it saves in frames or battery are untested.
 
-The fork adds two switches to Settings › Voice and the Ready state to the voice panel; it doesn't otherwise change
+10. **A live call ends after a stretch of silence; calls still have no length limit.**
+    - **Settings.** Settings › Voice, under Phone Live, has two settings: Phone Live silence and Watch Live silence.
+      - Each is a whole number of seconds from 1 to 60, 10 by default.
+      - Typing anything else shows an error and keeps the last saved value.
+      - Each call reads its value when it starts.
+      - Nothing else in the settings changed, and there is no call-length setting.
+    - **Silence starts counting** when the voice session is ready (`session.started`), not while dialling. These go
+      back to zero:
+      - the voice playing (the call's incoming audio level, as the orb uses);
+      - the person's voice at the microphone (unmuted, at the speech level `LIVE_SPEECH_LEVEL`, 0.025);
+      - words either side said (transcript pieces).
+    - **The speech level is approximate.** It's a level, not speech recognition: loud room noise counts as speech, and
+      it isn't calibrated on any device. A missing transcript is never taken as silence on its own.
+    - **Paused while:**
+      - Hermes works on a request;
+      - WebRTC reports the media link disconnected (`LiveCall.linked`, from the peer connection's state).
+    - **Still counts while:**
+      - **Muted.** Pressing Mute isn't speech and starts nothing.
+      - **The turn waits on the person's answer.** A question or approval waiting can therefore end the call after
+        the setting.
+    - **On expiry the call hangs up once**, as Hang up does. The panel, or the watch's call screen, says why: "The
+      live call ended after N seconds of silence." Nothing is spoken and nothing calls again. The transcript's final
+      flush, its notices and the text stop are as before; whichever ending comes first gives the reason.
+    - **The watch measures its own calls.** It holds the audio, and the phone's stand-in for a watch call has no sound
+      signals. The phone sends the watch's setting with the call (`CallUpdate.silenceSeconds`), and whether the turn
+      waits on the person (`CallUpdate.waiting`). Both are left out when unset, so older peers read the same messages.
+      A watch paired with an older phone uses 10 seconds. The watch ends the call through `endCall`, as its Hang up.
+    - **Talk never ends on silence.**
+    - **Code:**
+      - `shared/wearlink/.../LiveSilence.kt` (the rule: one clock, used by both apps);
+      - `LiveConversation` (`silenceSeconds`, the poll, `session.started`);
+      - `VoiceController.startChat(liveSilenceSeconds)` from `ChatViewModel` and `PhoneCallModel`;
+      - `LiveCall.linked` (`AndroidLiveCall`, `WatchCall`);
+      - `WatchCalls` (sends the setting);
+      - `wearApp/.../WatchSilence.kt` and `WatchLink` (the watch's poll, `endCall(reason)`);
+      - two `AppSettings` fields and `SettingsScreen.LiveSilenceRow`;
+      - strings in every language.
+    - **Tests:**
+      - `wearlink/LiveSilenceTest.kt` (the rule, settings parsing, the wire);
+      - `ui/voice/LiveSilenceCallTest.kt` (the real controller and conversation on a fake call, the test's clock:
+        dialling, the setting, over five minutes of activity, work and link holds, muted, a question waiting, Talk);
+      - `ui/voice/WatchCallSilenceTest.kt` (the watch's setting sent with the call, kept for it);
+      - `core/settings/LiveSilenceSettingsTest.kt`;
+      - `wearApp/.../WatchSilenceTest.kt`.
+
+      Not tested on a device: how the levels behave with real microphones, rooms and networks.
+
+The fork adds two switches and the two Live silence settings to Settings › Voice, and the Ready state to the voice panel; it doesn't otherwise change
 the settings screens or layout. The watch app changes only as described above, the reader and its settings row
 included.
 
@@ -373,6 +420,9 @@ For each conflict or failing test:
 - **Watch orb.** If upstream changes `HeraldOrb` or adds animation to the watch screens, keep `moving` from
   `orbMoves` at every orb, its clock running only while it's true, and `SpeechOut.sounding` set where playback really
   starts and ends.
+- **Live silence.** Keep `silenceSeconds` passed to every phone `LiveConversation` and the poll's `LiveSilence.sample`,
+  `start()` on `session.started`, and the watch's `WatchSilence` in `WatchLink`'s call poll. If upstream adds its own
+  idle ending, compare before dropping this; the server's `idle_timeout_s` only pauses the session and isn't a hang-up.
 - **Talk.** If upstream changes `startChat`, `hear` or `converseOnce`, keep the `mode` branch before the live check,
   `awaitTalk()` at the top of `hear`'s loop, and `MANUAL_TALK` for Talk's recordings. If it adds a `VoicePhase`, give
   it a place in `voicePress` and the panel's label. If upstream adds its own Live switch, use theirs and drop

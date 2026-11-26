@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class ReaderPluralsTest {
-    private val plurals = listOf("wear_saved_chats", "wear_reader_unreadable", "wear_reader_partial")
+    private val plurals = listOf("wear_saved_chats", "wear_reader_unreadable", "wear_reader_partial", "wear_call_ended_silence")
     private val forms = mapOf(
         "values" to setOf("one", "other"),
         "values-de" to setOf("one", "other"),

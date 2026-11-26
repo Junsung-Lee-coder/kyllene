@@ -138,4 +138,7 @@
     <plurals name="wear_reader_unreadable">
         <item quantity="other">%1$d 行保存的内容无法读取，已原样保留。</item>
     </plurals>
+    <plurals name="wear_call_ended_silence">
+        <item quantity="other">静音 %1$d 秒后，通话已结束。</item>
+    </plurals>
 </resources>

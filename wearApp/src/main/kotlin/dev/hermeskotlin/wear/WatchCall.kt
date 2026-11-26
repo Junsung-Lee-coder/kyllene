@@ -66,6 +66,7 @@ class WatchCall(context: Context) {
 
     @Volatile private var closed = false
     @Volatile private var micLevel = 0f
+    @Volatile private var linked = true
     @Volatile private var loudAt = 0L
     @Volatile private var statsPending = false
 
@@ -111,6 +112,8 @@ class WatchCall(context: Context) {
                 }
 
                 override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {
+                    // Fork: a stall isn't silence (LiveSilence holds while it lasts).
+                    linked = state != PeerConnection.PeerConnectionState.DISCONNECTED
                     if (state == PeerConnection.PeerConnectionState.FAILED || state == PeerConnection.PeerConnectionState.CLOSED) incoming.close()
                 }
 
@@ -208,6 +211,9 @@ class WatchCall(context: Context) {
 
     /** The microphone level, 0..1; polled. */
     fun micLevel(): Float = micLevel
+
+    /** Fork: the media link is up; false while WebRTC reports it disconnected. Polled. */
+    fun linked(): Boolean = linked
 
     fun setMuted(muted: Boolean) = synchronized(lock) {
         if (!closed) audioTrack?.setEnabled(!muted)

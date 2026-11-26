@@ -94,4 +94,14 @@
     <string name="voice_error_transcript_unreadable">Ein Teil eines früheren Live-Anruf-Transkripts in diesem Chat konnte nicht gelesen werden. Es bleibt unverändert auf dem Telefon.</string>
     <string name="voice_error_transcript_tail_unsaved">Das Ende des Transkripts dieses Anrufs konnte nicht auf dem Telefon gespeichert werden.</string>
     <string name="voice_error_live_text">Der Live-Anruf wurde beendet, weil du eine Nachricht gesendet hast.</string>
+    <string name="settings_phone_live_silence">Phone-Live-Stille</string>
+    <string name="settings_watch_live_silence">Watch-Live-Stille</string>
+    <string name="settings_live_silence_range">1–60 Sekunden</string>
+    <string name="settings_live_silence_unit">Sekunden</string>
+    <string name="settings_live_silence_detail">Beendet einen Live-Anruf nach Stille. Sprache und Sprachwiedergabe setzen den Timer zurück. Die Gesamtdauer eines Anrufs bleibt unbegrenzt. Änderungen gelten für neue Anrufe.</string>
+    <string name="settings_live_silence_error">Gib eine ganze Zahl von 1 bis 60 ein. Der gespeicherte Wert bleibt.</string>
+    <plurals name="voice_error_live_silence">
+        <item quantity="one">Der Live-Anruf wurde nach %1$d Sekunde Stille beendet.</item>
+        <item quantity="other">Der Live-Anruf wurde nach %1$d Sekunden Stille beendet.</item>
+    </plurals>
 </resources>

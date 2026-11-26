@@ -144,4 +144,9 @@
         <item quantity="many">%1$d de linhas salvas não puderam ser lidas. Elas são mantidas como estavam.</item>
         <item quantity="other">%1$d linhas salvas não puderam ser lidas. Elas são mantidas como estavam.</item>
     </plurals>
+    <plurals name="wear_call_ended_silence">
+        <item quantity="one">Chamada encerrada após %1$d segundo de silêncio.</item>
+        <item quantity="many">Chamada encerrada após %1$d de segundos de silêncio.</item>
+        <item quantity="other">Chamada encerrada após %1$d segundos de silêncio.</item>
+    </plurals>
 </resources>

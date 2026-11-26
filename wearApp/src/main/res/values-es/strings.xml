@@ -144,4 +144,9 @@
         <item quantity="many">%1$d de líneas guardadas no se pudieron leer. Se conservan tal cual.</item>
         <item quantity="other">%1$d líneas guardadas no se pudieron leer. Se conservan tal cual.</item>
     </plurals>
+    <plurals name="wear_call_ended_silence">
+        <item quantity="one">Llamada terminada tras %1$d segundo de silencio.</item>
+        <item quantity="many">Llamada terminada tras %1$d de segundos de silencio.</item>
+        <item quantity="other">Llamada terminada tras %1$d segundos de silencio.</item>
+    </plurals>
 </resources>

@@ -364,6 +364,16 @@ data class CallUpdate(
     val model: String? = null,
     val contextPercent: Int? = null,
     val scope: WatchScope? = null,
+    /**
+     * Fork (requirements §3.3): the watch ends this call after this many seconds of silence, set on the phone and
+     * read when the call started. Left out by older phones; the watch then uses [LIVE_SILENCE_DEFAULT_SECONDS].
+     */
+    val silenceSeconds: Int? = null,
+    /**
+     * Fork: Hermes's turn waits on the person's answer (a question or an approval) though [thinking]: the silence runs
+     * then. Left out when false; older phones never send it.
+     */
+    val waiting: Boolean = false,
 )
 
 /**

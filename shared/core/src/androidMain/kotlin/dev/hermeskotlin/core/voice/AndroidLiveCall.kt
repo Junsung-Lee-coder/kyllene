@@ -55,6 +55,7 @@ class AndroidLiveCall(context: Context) : LiveCall {
 
     @Volatile private var closed = false
     @Volatile private var micLevel = 0f
+    @Volatile private var linked = true
     @Volatile private var loudAt = 0L
     @Volatile private var statsPending = false
 
@@ -84,6 +85,8 @@ class AndroidLiveCall(context: Context) : LiveCall {
                 }
 
                 override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {
+                    // Fork: a stall isn't silence (LiveSilence holds while it lasts).
+                    linked = state != PeerConnection.PeerConnectionState.DISCONNECTED
                     if (state == PeerConnection.PeerConnectionState.FAILED || state == PeerConnection.PeerConnectionState.CLOSED) incoming.close()
                 }
 
@@ -161,6 +164,8 @@ class AndroidLiveCall(context: Context) : LiveCall {
     }
 
     override fun micLevel(): Float = micLevel
+
+    override fun linked(): Boolean = linked
 
     override fun setMuted(muted: Boolean) {
         audioTrack?.setEnabled(!muted)

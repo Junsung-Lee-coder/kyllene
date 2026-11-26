@@ -141,4 +141,8 @@
         <item quantity="one">%1$d gespeicherte Zeile ist nicht lesbar. Sie bleibt unverändert erhalten.</item>
         <item quantity="other">%1$d gespeicherte Zeilen sind nicht lesbar. Sie bleiben unverändert erhalten.</item>
     </plurals>
+    <plurals name="wear_call_ended_silence">
+        <item quantity="one">Anruf nach %1$d Sekunde Stille beendet.</item>
+        <item quantity="other">Anruf nach %1$d Sekunden Stille beendet.</item>
+    </plurals>
 </resources>

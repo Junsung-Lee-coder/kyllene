@@ -118,8 +118,9 @@ class PhoneCallModel(
             }
             // On the line: the agent hears it was answered, and the voice opens with why it called.
             call.agent?.end(CallOutcome.Answered)
-            val pause = (settings.settings.value ?: AppSettings()).voicePause
-            voice.startChat(chat.session, chat.gateway, chat.profile, pause.millis, opener = call.agent?.reason)
+            val now = settings.settings.value ?: AppSettings()
+            // Fork: the phone's Live silence setting holds for a call the agent placed too.
+            voice.startChat(chat.session, chat.gateway, chat.profile, now.voicePause.millis, opener = call.agent?.reason, liveSilenceSeconds = now.phoneLiveSilenceSeconds)
             // A new chat gets its id with the first request: it's held from then on.
             if (call.storedSessionId == null) {
                 launch { relay.callChat(chat.session.state.mapNotNull { it.storedSessionId }.first()) }

@@ -37,13 +37,23 @@ import kotlinx.coroutines.withContext
 import dev.hermeskotlin.core.custom.ChatTurn
 import dev.hermeskotlin.core.custom.LiveTranscripts
 import dev.hermeskotlin.core.custom.withEarlierCalls
+import dev.hermeskotlin.wearlink.LiveSilence
+import dev.hermeskotlin.wearlink.liveSilenceSeconds
+import kotlin.time.TimeSource
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
 import dev.hermeskotlin.ui.resources.*
+import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.getString
+
+/** Fork: a monotonic clock in milliseconds from now, for [LiveSilence]. */
+internal fun monotonicMillis(): () -> Long {
+    val origin = TimeSource.Monotonic.markNow()
+    return { origin.elapsedNow().inWholeMilliseconds }
+}
 
 /**
  * One GPT-Live call in a chat, Desktop's useVoiceLiveConversation: the voice model owns the microphone and
@@ -66,7 +76,18 @@ internal class LiveConversation(
     private val recording: LiveTranscripts.Recording? = null,
     /** Fork: the same account's and session's earlier calls, for this call's opening history. */
     private val earlier: List<LiveTranscripts.EarlierCall> = emptyList(),
+    /**
+     * Fork (requirements §3.3): the call ends after this many seconds of silence (LiveSilence); null never does, as
+     * for the watch's call, whose audio, and so its silence, is the watch's.
+     */
+    silenceSeconds: Int? = null,
+    /** Fork: a monotonic clock in milliseconds, for the silence. */
+    now: () -> Long = monotonicMillis(),
 ) {
+    /** Fork: this call's silence, read when the call starts: a change in settings applies from the next one. */
+    private val silence = silenceSeconds?.let { LiveSilence(it, now) }
+    private val silenceLimit = liveSilenceSeconds(silenceSeconds)
+
     /** Fork: what's taken of the transcript couldn't be written yet; said once until it is. */
     private var unsaved = false
 
@@ -146,6 +167,11 @@ internal class LiveConversation(
      * can't). Returns what went wrong, or null for an ending the person chose.
      */
     suspend fun run(connect: suspend () -> Unit): String? = coroutineScope {
+        // Fork: why a silence ends it, in words read now, so the hang-up itself never waits.
+        val silenceReason = silence?.let {
+            runCatching { getPluralString(Res.plurals.voice_error_live_silence, silenceLimit, silenceLimit) }.getOrNull()
+                ?: "The live call ended after $silenceLimit seconds of silence."
+        }
         val ended = CompletableDeferred<String?>()
         val started = CompletableDeferred<Unit>()
         try {
@@ -164,6 +190,20 @@ internal class LiveConversation(
             while (isActive) {
                 val speaking = call.speaking()
                 if (speaking) onConnectionResult()
+                val waitingOnYou = session.state.value.inputRequests.isNotEmpty()
+                // Fork: the voice playing or the person at the microphone; held while Hermes works or the link is down.
+                // Muted, or waiting for an answer, the silence runs. Once: the call hangs up as Hang up does, saying why.
+                if (silence?.sample(
+                        playing = speaking,
+                        micLevel = call.micLevel(),
+                        muted = state.value.muted,
+                        // Hermes at work; not while its turn waits on the person's answer, which is their silence.
+                        working = (delegationId != null || delegation?.isActive == true) && !waitingOnYou,
+                        linked = call.linked(),
+                    ) == true && !hungUp.isCompleted
+                ) {
+                    hangUp(silenceReason)
+                }
                 state.update {
                     it.copy(
                         phase = when {
@@ -173,6 +213,7 @@ internal class LiveConversation(
                             else -> VoicePhase.Listening
                         },
                         level = if (it.muted || speaking) 0f else call.micLevel(),
+                        waitingOnYou = waitingOnYou,
                     )
                 }
                 delay(POLL_MS)
@@ -195,6 +236,8 @@ internal class LiveConversation(
                 when (val event = parsed) {
                     is LiveEvent.Transcript -> {
                         if (event.fragment.speaker == LiveFragment.Speaker.Assistant) onConnectionResult()
+                        // Fork: words heard or said are sound too; their absence alone is never taken as silence.
+                        if (event.fragment.text.isNotBlank()) silence?.activity()
                         // Fork: each piece the call sends, kept once, in order.
                         keep { it.add(event.fragment) }
                         transcript += event.fragment
@@ -274,6 +317,8 @@ internal class LiveConversation(
                     }
                     LiveEvent.Started -> {
                         onConnectionResult()
+                        // Fork: the session is ready: the silence counts from here, not while dialling.
+                        silence?.start()
                         started.complete(Unit)
                     }
                     null -> Unit

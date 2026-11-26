@@ -1,5 +1,6 @@
 package dev.hermeskotlin.core.settings
 
+import dev.hermeskotlin.wearlink.LIVE_SILENCE_DEFAULT_SECONDS
 import dev.hermeskotlin.core.bots.SidebarMode
 import dev.hermeskotlin.core.gateway.GatewayUrl
 import dev.hermeskotlin.core.network.HermesJson
@@ -114,6 +115,13 @@ data class AppSettings(
      * microphone service, rather than letting go of them for music. Changing it starts nothing.
      */
     val backgroundEarphoneButton: Boolean = false,
+    /**
+     * Fork (requirements §3.3): a live call on the phone ends after this many seconds of silence, 1 to 60
+     * (`liveSilenceSeconds` keeps any other value in range). Read when a call starts. Calls have no length limit.
+     */
+    val phoneLiveSilenceSeconds: Int = LIVE_SILENCE_DEFAULT_SECONDS,
+    /** Fork: the same for a live call on the watch: set here, sent to the watch with each call, which ends it. */
+    val watchLiveSilenceSeconds: Int = LIVE_SILENCE_DEFAULT_SECONDS,
     /** What tapping Send does while a reply is running; a long press on Send picks another for one message. */
     val runningSend: RunningSend = RunningSend.Steer,
     /**

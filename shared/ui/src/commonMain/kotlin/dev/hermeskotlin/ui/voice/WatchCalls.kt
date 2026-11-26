@@ -1,5 +1,7 @@
 package dev.hermeskotlin.ui.voice
 
+import dev.hermeskotlin.wearlink.liveSilenceSeconds
+import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.core.network.ApiResult
 import dev.hermeskotlin.core.phone.CallOpeners
 import dev.hermeskotlin.core.phone.liveOpener
@@ -66,6 +68,8 @@ class WatchCalls(
     private val transcripts: LiveTranscripts? = null,
     /** Fork: text sent on the phone where it reaches the watch's call hangs it up (SpeechGate). */
     private val speechGate: SpeechGate? = null,
+    /** Fork: where Settings › Watch Live silence is kept; sent with the call, which the watch ends on silence. */
+    private val settings: SettingsStore? = null,
 ) {
     private val serial = Dispatchers.Default.limitedParallelism(1)
     private val scope = CoroutineScope(appScope.coroutineContext + SupervisorJob(appScope.coroutineContext[Job]) + serial)
@@ -166,15 +170,17 @@ class WatchCalls(
             gate.onText { if (gate.reaches(it, scope)) conversation.hangUp(why) }
         }
         var answer: String? = null
+        // Fork: the watch's silence setting, as it is now: the watch holds the call's audio, so the watch ends it.
+        val silence = liveSilenceSeconds(settings?.settings?.value?.watchLiveSilenceSeconds)
         held.onAnswer = { sdp ->
             answer = sdp
-            tell(last.copy(phase = CallPhase.Live, answerSdp = sdp))
+            tell(last.copy(phase = CallPhase.Live, answerSdp = sdp, silenceSeconds = silence))
         }
         // What the watch shows of the call, a few times a second at most: the captions, Hermes at work, the chat.
         val forward = scope.launch {
             var heldChat: String? = null
             combine(voice, chat.session.state) { v, s ->
-                CallView(v.caption, v.captionIsVoice, v.phase == VoicePhase.Thinking, v.working, v.error?.let(::briefError), s.storedSessionId, s.title, modelOf(s), contextPercentOf(s))
+                CallView(v.caption, v.captionIsVoice, v.phase == VoicePhase.Thinking, v.waitingOnYou, v.working, v.error?.let(::briefError), s.storedSessionId, s.title, modelOf(s), contextPercentOf(s))
             }.distinctUntilChanged().conflate().collect { view ->
                 view.chatId?.takeIf { it != heldChat }?.let {
                     heldChat = it
@@ -187,6 +193,7 @@ class WatchCalls(
                             caption = view.caption,
                             captionIsVoice = view.captionIsVoice,
                             thinking = view.thinking,
+                            waiting = view.waiting,
                             working = view.working,
                             error = view.error,
                             chatId = view.chatId ?: last.chatId,
@@ -328,6 +335,8 @@ class WatchCalls(
         val caption: String?,
         val captionIsVoice: Boolean,
         val thinking: Boolean,
+        /** Fork: the turn waits on the person (LiveSilence runs). */
+        val waiting: Boolean,
         val working: String?,
         val error: String?,
         val chatId: String?,

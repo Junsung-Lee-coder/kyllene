@@ -100,4 +100,16 @@
     <string name="voice_error_transcript_unreadable">Some earlier live call transcript in this chat couldn't be read. It's kept on the phone as it was.</string>
     <string name="voice_error_transcript_tail_unsaved">The end of this call's transcript couldn't be saved on the phone.</string>
     <string name="voice_error_live_text">The live call ended because you sent a message.</string>
+    <!-- Fork: a live call ends after silence (not a call-length limit) -->
+    <string name="settings_phone_live_silence">Phone Live silence</string>
+    <string name="settings_watch_live_silence">Watch Live silence</string>
+    <string name="settings_live_silence_range">1–60 seconds</string>
+    <string name="settings_live_silence_unit">seconds</string>
+    <string name="settings_live_silence_detail">Ends a Live call after silence. Speech and voice playback reset the timer. Total call length stays unlimited. Changes apply to new calls.</string>
+    <string name="settings_live_silence_error">Enter a whole number from 1 to 60. The saved value stays.</string>
+    <!-- %1$d: the silence setting, in seconds -->
+    <plurals name="voice_error_live_silence">
+        <item quantity="one">The live call ended after %1$d second of silence.</item>
+        <item quantity="other">The live call ended after %1$d seconds of silence.</item>
+    </plurals>
 </resources>

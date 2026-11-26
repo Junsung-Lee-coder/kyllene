@@ -1,5 +1,7 @@
 package dev.hermeskotlin.ui.settings
 
+import dev.hermeskotlin.wearlink.liveSilenceSeconds
+import dev.hermeskotlin.wearlink.parseLiveSilence
 import dev.hermeskotlin.designsystem.components.Tooltip
 import dev.hermeskotlin.designsystem.components.handCursor
 
@@ -163,6 +165,8 @@ import dev.hermeskotlin.designsystem.accent
 import dev.hermeskotlin.designsystem.accentText
 import dev.hermeskotlin.designsystem.background
 import dev.hermeskotlin.designsystem.body
+import dev.hermeskotlin.designsystem.caption
+import androidx.compose.ui.text.input.KeyboardType
 import dev.hermeskotlin.designsystem.bodySmall
 import dev.hermeskotlin.designsystem.code
 import dev.hermeskotlin.designsystem.colors
@@ -723,6 +727,26 @@ internal fun SettingsView(
                             checked = settings.phoneLive,
                             onCheckedChange = { on -> onUpdate { it.copy(phoneLive = on) } },
                         )
+                        Divider()
+                        // Fork (requirements §3.3): how long a live call may be silent, the phone's and the watch's apart.
+                        // Not a limit on a call's length: calls have none.
+                        LiveSilenceRow(
+                            stringResource(Res.string.settings_phone_live_silence),
+                            liveSilenceSeconds(settings.phoneLiveSilenceSeconds),
+                        ) { seconds -> onUpdate { it.copy(phoneLiveSilenceSeconds = seconds) } }
+                        LiveSilenceRow(
+                            stringResource(Res.string.settings_watch_live_silence),
+                            liveSilenceSeconds(settings.watchLiveSilenceSeconds),
+                        ) { seconds -> onUpdate { it.copy(watchLiveSilenceSeconds = seconds) } }
+                        val silenceDetail = stringResource(Res.string.settings_live_silence_detail)
+                        if (settingShown(silenceDetail, stringResource(Res.string.settings_phone_live_silence), stringResource(Res.string.settings_watch_live_silence))) {
+                            Text(
+                                silenceDetail,
+                                style = Theme[typography][bodySmall],
+                                color = Theme[colors][textTertiary],
+                                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 13.dp),
+                            )
+                        }
                         Divider()
                         SwitchRow(
                             title = stringResource(Res.string.settings_background_button),
@@ -1344,6 +1368,40 @@ private fun Field(title: String, detail: String? = null, control: @Composable ()
             if (detail != null) Text(detail, style = Theme[typography][bodySmall], color = Theme[colors][textTertiary])
         }
         control()
+    }
+}
+
+/**
+ * Fork: a live call's silence in whole seconds, typed: what's typed saves once it's 1 to 60; anything else says so
+ * and leaves the saved value as it was.
+ */
+@Composable
+private fun LiveSilenceRow(title: String, saved: Int, onSave: (Int) -> Unit) {
+    val range = stringResource(Res.string.settings_live_silence_range)
+    if (!settingShown(title, range)) return
+    val state = rememberTextFieldState(saved.toString())
+    val valid = parseLiveSilence(state.text.toString())
+    LaunchedEffect(state) {
+        snapshotFlow { parseLiveSilence(state.text.toString()) }.collect { seconds -> if (seconds != null) onSave(seconds) }
+    }
+    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(title, style = Theme[typography][body], color = Theme[colors][text])
+                Text(range, style = Theme[typography][bodySmall], color = Theme[colors][textTertiary])
+            }
+            TextField(
+                state,
+                modifier = Modifier.width(132.dp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                trailing = {
+                    Text(stringResource(Res.string.settings_live_silence_unit), style = Theme[typography][bodySmall], color = Theme[colors][textTertiary], modifier = Modifier.padding(end = 10.dp))
+                },
+            )
+        }
+        if (valid == null) {
+            Text(stringResource(Res.string.settings_live_silence_error), style = Theme[typography][caption], color = Theme[colors][danger])
+        }
     }
 }
 

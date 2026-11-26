@@ -1,5 +1,6 @@
 package dev.hermeskotlin.ui.voice
 
+import dev.hermeskotlin.wearlink.LIVE_SILENCE_DEFAULT_SECONDS
 import dev.hermeskotlin.core.chat.ChatMessage
 import dev.hermeskotlin.core.chat.ChatSession
 import dev.hermeskotlin.core.chat.ChatState
@@ -106,6 +107,11 @@ data class VoiceChatState(
     val bargeIn: Boolean = false,
     /** Fork: Talk, Phone Live off ([VoiceMode.Manual]): each request is recorded until it's sent or dropped. */
     val manual: Boolean = false,
+    /**
+     * Fork: in a live call, Hermes's turn waits on the person (a question or an approval): the call's silence runs then,
+     * though the turn is still open (requirements §3.3).
+     */
+    val waitingOnYou: Boolean = false,
 )
 
 data class DictationState(
@@ -161,6 +167,8 @@ class VoiceController(
     private val liveTranscripts: LiveTranscripts? = null,
     /** Fork: text sent after a voice request silences its reply (requirements §6.1); null reads every reply. */
     private val speechGate: SpeechGate? = null,
+    /** Fork: the monotonic clock live calls measure silence on (LiveSilence); tests give theirs. */
+    private val liveClock: () -> Long = monotonicMillis(),
     private val liveCalls: LiveCalls? = null,
 ) {
     private val _chat = MutableStateFlow(VoiceChatState())
@@ -287,6 +295,11 @@ class VoiceController(
         mode: VoiceMode = VoiceMode.Stock,
         /** Fork: Talk stays Ready out of sight (Settings › Background earphone button); asked each time. */
         readyAway: () -> Boolean = { false },
+        /**
+         * Fork (requirements §3.3): a live call this starts ends after this many seconds of silence (Settings › Phone
+         * Live silence), read now. Talk never ends on silence.
+         */
+        liveSilenceSeconds: Int = LIVE_SILENCE_DEFAULT_SECONDS,
     ) {
         if (chatJob?.isActive == true) return
         this.readyAway = readyAway
@@ -330,7 +343,7 @@ class VoiceController(
                 }
                 // Asked while the live check goes on: a chained chat needs it before its first listen.
                 val talkOver = async { audio.bargeIn(gateway, profile) }
-                if (startLive(session, gateway, profile, opener) { ringing?.cancelAndJoin() }) {
+                if (startLive(session, gateway, profile, opener, liveSilenceSeconds) { ringing?.cancelAndJoin() }) {
                     talkOver.cancel()
                     return@launch
                 }
@@ -577,7 +590,7 @@ class VoiceController(
      * Runs a GPT-Live call when the profile picked it and it can start; false to fall back to the chained chat
      * (another mode, no OpenAI key on the gateway, an older gateway, or no WebRTC on this device).
      */
-    private suspend fun startLive(session: ChatSession, gateway: GatewayUrl, profile: String?, opener: CallReason?, onConnectionResult: suspend () -> Unit): Boolean {
+    private suspend fun startLive(session: ChatSession, gateway: GatewayUrl, profile: String?, opener: CallReason?, silenceSeconds: Int, onConnectionResult: suspend () -> Unit): Boolean {
         val calls = liveCalls ?: return false
         val status = audio.voiceLiveStatus(gateway, profile)
         if (status !is ApiResult.Success || !status.value.live) return false
@@ -600,6 +613,8 @@ class VoiceController(
             call, session, _chat, deviceLock, opener?.liveOpener(), onConnectionResult,
             recording = recording,
             earlier = earlier?.calls.orEmpty(),
+            silenceSeconds = silenceSeconds,
+            now = liveClock,
         )
         live = conversation
         // Fork: text sent where it reaches this call (SpeechGate) hangs it up, as Hang up does, saying why: its voice

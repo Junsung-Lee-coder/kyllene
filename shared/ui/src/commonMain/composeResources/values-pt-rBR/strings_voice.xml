@@ -94,4 +94,15 @@
     <string name="voice_error_transcript_unreadable">Parte de uma transcrição anterior de chamada ao vivo deste chat não pôde ser lida. Ela fica no telefone como estava.</string>
     <string name="voice_error_transcript_tail_unsaved">O final da transcrição desta chamada não pôde ser salvo no telefone.</string>
     <string name="voice_error_live_text">A chamada ao vivo terminou porque você enviou uma mensagem.</string>
+    <string name="settings_phone_live_silence">Silêncio do Phone Live</string>
+    <string name="settings_watch_live_silence">Silêncio do Watch Live</string>
+    <string name="settings_live_silence_range">1–60 segundos</string>
+    <string name="settings_live_silence_unit">segundos</string>
+    <string name="settings_live_silence_detail">Encerra uma chamada ao vivo após silêncio. A fala e a reprodução de voz reiniciam o cronômetro. A duração total da chamada continua ilimitada. As mudanças valem para novas chamadas.</string>
+    <string name="settings_live_silence_error">Digite um número inteiro de 1 a 60. O valor salvo é mantido.</string>
+    <plurals name="voice_error_live_silence">
+        <item quantity="one">A chamada ao vivo terminou após %1$d segundo de silêncio.</item>
+        <item quantity="many">A chamada ao vivo terminou após %1$d de segundos de silêncio.</item>
+        <item quantity="other">A chamada ao vivo terminou após %1$d segundos de silêncio.</item>
+    </plurals>
 </resources>

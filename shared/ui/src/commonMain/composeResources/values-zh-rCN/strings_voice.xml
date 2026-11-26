@@ -94,4 +94,13 @@
     <string name="voice_error_transcript_unreadable">此聊天中较早的实时通话转写有部分无法读取。它已按原样保留在手机上。</string>
     <string name="voice_error_transcript_tail_unsaved">此通话转写的末尾部分无法保存到手机。</string>
     <string name="voice_error_live_text">因为你发送了消息，实时通话已结束。</string>
+    <string name="settings_phone_live_silence">Phone Live 静音</string>
+    <string name="settings_watch_live_silence">Watch Live 静音</string>
+    <string name="settings_live_silence_range">1–60 秒</string>
+    <string name="settings_live_silence_unit">秒</string>
+    <string name="settings_live_silence_detail">静音一段时间后结束实时通话。说话和语音播放会重置计时。通话总时长仍然不限。更改适用于新的通话。</string>
+    <string name="settings_live_silence_error">请输入 1 到 60 之间的整数。已保存的值保持不变。</string>
+    <plurals name="voice_error_live_silence">
+        <item quantity="other">静音 %1$d 秒后，实时通话已结束。</item>
+    </plurals>
 </resources>

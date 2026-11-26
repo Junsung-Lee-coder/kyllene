@@ -141,4 +141,8 @@
         <item quantity="one">%1$d mentett sor nem olvasható. Változatlanul megmarad.</item>
         <item quantity="other">%1$d mentett sor nem olvasható. Változatlanul megmaradnak.</item>
     </plurals>
+    <plurals name="wear_call_ended_silence">
+        <item quantity="one">A hívás %1$d másodperc csend után véget ért.</item>
+        <item quantity="other">A hívás %1$d másodperc csend után véget ért.</item>
+    </plurals>
 </resources>

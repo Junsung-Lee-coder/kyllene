@@ -759,6 +759,7 @@ class ChatViewModel(
             ringback = ringback,
             mode = phoneVoiceMode(now.phoneLive),
             readyAway = { (settings.settings.value ?: AppSettings()).backgroundEarphoneButton },
+            liveSilenceSeconds = now.phoneLiveSilenceSeconds,
         )
     }
 

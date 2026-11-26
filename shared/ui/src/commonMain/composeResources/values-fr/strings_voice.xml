@@ -94,4 +94,15 @@
     <string name="voice_error_transcript_unreadable">Une partie d'une transcription d'appel en direct précédente de ce chat n'a pas pu être lue. Elle est conservée telle quelle sur le téléphone.</string>
     <string name="voice_error_transcript_tail_unsaved">La fin de la transcription de cet appel n'a pas pu être enregistrée sur le téléphone.</string>
     <string name="voice_error_live_text">L'appel en direct s'est terminé parce que vous avez envoyé un message.</string>
+    <string name="settings_phone_live_silence">Silence Phone Live</string>
+    <string name="settings_watch_live_silence">Silence Watch Live</string>
+    <string name="settings_live_silence_range">1–60 secondes</string>
+    <string name="settings_live_silence_unit">secondes</string>
+    <string name="settings_live_silence_detail">Termine un appel en direct après un silence. La parole et la lecture de la voix remettent le minuteur à zéro. La durée totale de l'appel reste illimitée. Les changements s'appliquent aux nouveaux appels.</string>
+    <string name="settings_live_silence_error">Saisissez un nombre entier de 1 à 60. La valeur enregistrée est conservée.</string>
+    <plurals name="voice_error_live_silence">
+        <item quantity="one">L'appel en direct s'est terminé après %1$d seconde de silence.</item>
+        <item quantity="many">L'appel en direct s'est terminé après %1$d de secondes de silence.</item>
+        <item quantity="other">L'appel en direct s'est terminé après %1$d secondes de silence.</item>
+    </plurals>
 </resources>
