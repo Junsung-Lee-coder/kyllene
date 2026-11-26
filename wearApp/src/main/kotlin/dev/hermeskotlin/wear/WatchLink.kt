@@ -18,6 +18,7 @@ import dev.hermeskotlin.wearlink.ChatListRequest
 import dev.hermeskotlin.wearlink.PhoneStatus
 import dev.hermeskotlin.wearlink.PhoneStatusRequest
 import dev.hermeskotlin.wearlink.RecordedAsk
+import dev.hermeskotlin.wearlink.writeRecordedAsk
 import dev.hermeskotlin.wearlink.ReplyPhase
 import dev.hermeskotlin.wearlink.ReplySpeech
 import dev.hermeskotlin.wearlink.ReplyUpdate
@@ -56,6 +57,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import java.io.File
 import java.util.UUID
 
 /** One ask and where its turn stands: [asked] is what was typed or recognized here (null until the phone transcribes). */
@@ -276,15 +278,21 @@ class WatchLink(
     /** The ask whose voice was stopped here: its clips still arriving are dropped. */
     @Volatile private var silenced: String? = null
 
-    /** Sends what was said or typed; with [audio], the phone has the gateway transcribe it first. */
-    fun ask(text: String?, audio: ByteArray? = null, audioType: String? = null) {
+    /**
+     * Sends what was said or typed; with [audio] (a recording's file), the phone has the gateway transcribe it first.
+     * The file is streamed to the phone and deleted once sent, or once the ask goes no further.
+     */
+    fun ask(text: String?, audio: File? = null, audioType: String? = null) {
         speech.stop()
         dismissCall()
         val id = UUID.randomUUID().toString()
         val chat = store.chat.value
         val ask = WatchAsk(id, text.orEmpty().trim(), chat.id, speak = store.speak.value && speech.canPlay(), audioType = audioType, botProfile = chat.botProfile, scope = chat.scope, newChat = chat.newChat)
         _turn.value = WatchTurn(id, text?.trim(), ReplyUpdate(id, if (audio != null) ReplyPhase.Transcribing else ReplyPhase.Sending, chatId = chat.id, title = chat.title))
-        if (chat.botProfile != null && !botChats) return fail(id, say(R.string.wear_update_for_bots))
+        if (chat.botProfile != null && !botChats) {
+            audio?.delete()
+            return fail(id, say(R.string.wear_update_for_bots))
+        }
         val generation = _profileReset.value
         askJob?.cancel()
         askJob = scope.launch(main) {
@@ -292,10 +300,10 @@ class WatchLink(
             if (generation != _profileReset.value || _turn.value?.askId != id) return@launch
             if (chat.scope != null && !profileSync) return@launch fail(id, say(R.string.wear_update_for_profiles))
             val bot = chat.botProfile != null
-            val sent = if (audio != null) stream(WearPaths.recordingPath(id, bot), RecordedAsk.write(ask, audio)) { generation == _profileReset.value && profileChecked && _turn.value?.askId == id }
+            val sent = if (audio != null) stream(WearPaths.recordingPath(id, bot), ask, audio) { generation == _profileReset.value && profileChecked && _turn.value?.askId == id }
                 else send(if (bot) WearPaths.BOT_ASK else WearPaths.ASK, WearJson.encode(ask)) { generation == _profileReset.value && profileChecked && _turn.value?.askId == id }
             if (sent != null) fail(id, sent)
-        }
+        }.also { job -> if (audio != null) job.invokeOnCompletion { audio.delete() } }
         watchdog?.cancel()
         watchdog = scope.launch {
             delay(ANSWER_WITHIN_MS)
@@ -762,12 +770,13 @@ class WatchLink(
         messages.sendMessage(node, path, data).await()
     }
 
-    private suspend fun stream(path: String, data: ByteArray, current: () -> Boolean = { true }): String? = reach(path, data, current) { node ->
+    /** A recorded ask down a channel: its header, then the recording's file a piece at a time (never all in memory). */
+    private suspend fun stream(path: String, ask: WatchAsk, audio: File, current: () -> Boolean = { true }): String? = reach(path, RecordedAsk.write(ask, ByteArray(0)), current) { node ->
         val channel = channels.openChannel(node, path).await()
         try {
             val output = channels.getOutputStream(channel).await()
             if (!current()) return@reach
-            withContext(Dispatchers.IO) { output.use { it.write(data) } }
+            withContext(Dispatchers.IO) { output.use { writeRecordedAsk(it, ask, audio) } }
         } finally {
             channels.close(channel)
         }

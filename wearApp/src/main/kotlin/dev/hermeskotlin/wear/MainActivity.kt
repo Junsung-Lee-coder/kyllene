@@ -2,13 +2,11 @@ package dev.hermeskotlin.wear
 
 import dev.hermeskotlin.wearlink.WakeEndSilence
 import android.Manifest
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.speech.RecognizerIntent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,30 +34,22 @@ data class Listening(
 )
 
 /**
- * The talk screen. A tap on the mic opens the watch's own speech recognizer, so only words go to the phone;
- * a watch without one records and the gateway transcribes. Launched with
+ * The talk screen. A tap on the mic records one request here until it's sent (the orb, Done talking) or dropped
+ * (leaving the screen), and the gateway transcribes it (requirements §3.2). Launched with
  * [EXTRA_CALL] (the tile, the complication) it resolves the phone’s default target and calls.
  * With [EXTRA_LISTEN], or as the watch's assistant (`ACTION_ASSIST`), it starts listening at once.
  */
 class MainActivity : ComponentActivity() {
 
     private val app get() = HeraldWatch.of(this)
-    private val recorder = WatchRecorder()
+    private val recorder = WatchRecorder(this)
     private val listening = MutableStateFlow(Listening())
     private var recordingJob: Job? = null
     private var defaultCallJob: Job? = null
     private var permissionDefault: String? = null
     private var callPermissionPending = false
     private var inputGeneration: Long? = null
-    private var recognitionGeneration: Long? = null
     private var callGeneration: Long? = null
-
-    private val recognize = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val said = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()
-        val generation = recognitionGeneration
-        recognitionGeneration = null
-        if (!said.isNullOrEmpty()) completeInput(generation) { app.link.ask(said) }
-    }
 
     private val microphone = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) completeInput(inputGeneration, ::record) else listening.value = Listening(error = NEEDS_MICROPHONE)
@@ -152,7 +142,7 @@ class MainActivity : ComponentActivity() {
 
     /** Fork: the wake word was heard on this screen: a call as Talk would with Talk live on, else one request recorded. */
     private fun wakeStart() {
-        if (recordingJob?.isActive == true || recognitionGeneration != null || app.link.call.value?.active == true) return
+        if (recordingJob?.isActive == true || app.link.call.value?.active == true) return
         if (app.link.liveVoice.value && app.store.live.value) return call()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
         val generation = app.link.profileReset.value
@@ -161,9 +151,9 @@ class MainActivity : ComponentActivity() {
         listening.value = Listening(recording = true)
         @Suppress("MissingPermission") // checked above.
         recordingJob = lifecycleScope.launch {
-            recordAsk(listening, generation, { app.link.profileReset.value }, { onLevel -> recorder.record(endpoint, onLevel) }) { audio ->
+            recordAsk(listening, generation, { app.link.profileReset.value }, { onLevel -> recorder.record(endpoint, onLevel) }, ask = { audio ->
                 app.link.ask(null, audio, WatchRecorder.MIME_TYPE)
-            }
+            }, drop = { it.delete() })
         }
     }
 
@@ -244,8 +234,8 @@ class MainActivity : ComponentActivity() {
 
     private fun talk() {
         // A second call-up while Herald already hears (the assistant button pressed twice) changes nothing: its own
-        // recording, the watch's recognizer, or a live call.
-        if (recordingJob?.isActive == true || recognitionGeneration != null || app.link.call.value?.active == true) return
+        // recording, or a live call.
+        if (recordingJob?.isActive == true || app.link.call.value?.active == true) return
         defaultCallJob?.cancel()
         permissionDefault = null
         callPermissionPending = false
@@ -281,23 +271,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Fork (requirements §3.2): Talk records here, straight to listening, until it's sent or dropped. Not the watch's
+     * speech recognizer: that one ends the session itself once speech stops, which Talk mustn't.
+     */
     private fun listen() {
-        // Nothing of the last reply may play while the recognizer listens.
+        // Nothing of the last reply may play while the microphone is open.
         app.link.quiet()
-        // The watch's speech recognizer, straight to listening: talking is what the mic is for.
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.wear_ask_hermes))
-        if (intent.resolveActivity(packageManager) != null) {
-            try {
-                recognitionGeneration = app.link.profileReset.value
-                recognize.launch(intent)
-                return
-            } catch (_: ActivityNotFoundException) {
-                // Listed but gone: record instead.
-                recognitionGeneration = null
-            }
-        }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             record()
         } else {
@@ -311,9 +291,9 @@ class MainActivity : ComponentActivity() {
         val generation = app.link.profileReset.value
         listening.value = Listening(recording = true)
         recordingJob = lifecycleScope.launch {
-            recordAsk(listening, generation, { app.link.profileReset.value }, recorder::record) { audio ->
+            recordAsk(listening, generation, { app.link.profileReset.value }, { onLevel -> recorder.record(onLevel) }, ask = { audio ->
                 app.link.ask(null, audio, WatchRecorder.MIME_TYPE)
-            }
+            }, drop = { it.delete() })
         }
     }
 

@@ -58,6 +58,17 @@ class RecordAskTest {
     }
 
     @Test
+    fun aRecordingNotSentIsLetGoAndOneSentIsNot() = runBlocking {
+        val dropped = mutableListOf<ByteArray>()
+        val recording = byteArrayOf(7)
+        recordAsk(listening, 1, { 2 }, { recording }, ask = { asked += it }, drop = { dropped += it })
+        assertEquals(listOf(recording), dropped)
+        recordAsk(listening, 2, { 2 }, { recording }, ask = { asked += it }, drop = { dropped += it })
+        assertEquals(1, dropped.size)
+        assertEquals(listOf(recording), asked)
+    }
+
+    @Test
     fun aMicrophoneFailureIsShown() {
         run { error("busy") }
         assertEquals(WatchLine.Raw("busy"), listening.value.error)

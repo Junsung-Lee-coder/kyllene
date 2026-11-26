@@ -174,6 +174,25 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
        waiting.
      - None of this is tried on a device yet.
    - The watch's Talk live starts off. The phone's switch is separate.
+   - **The watch's Talk** (the mic, the tile with no live voice, and the watch's assistant) records here too, until
+     it's sent (the orb, Done talking) or dropped (leaving the screen or the panel). No pause, silence or time limit
+     ends it. It records itself rather than opening the watch's speech recognizer, which ends its own session once
+     speech stops ([RecognizerIntent](https://developer.android.com/reference/android/speech/RecognizerIntent): the
+     silence extras "may have no effect"). Sent with more than half a second of sound, it goes, heard or quiet; sent
+     before that with nothing heard, it says nothing was heard and sends nothing. After the reply the watch waits;
+     nothing records on its own.
+     - The recording goes to a file in the watch's cache as it's taken, is streamed to the phone a piece at a time,
+       and is deleted once sent or dropped, so a long one takes no more of the watch's memory than a short one. The
+       phone reads it as it arrives, with no size limit, and holds it as it holds its own Talk recording for the
+       gateway to transcribe.
+     - A request the wake word started still ends on the wake setting's quiet spell (item 11).
+     - Code: `wearApp/.../WatchRecorder.kt` (`Endpoint.TALK`, the file), `RecordAsk.kt`, `WatchLink.ask`,
+       `MainActivity.listen`, `HeraldWearAssistSession`, `WatchWake`, the phone's `WearBridgeService`, and
+       `wearlink/.../RecordedAskStream.kt` (`writeRecordedAsk`, `readRecordedAsk`) with `RecordedAsk.headerSize`/`header`.
+     - Tests: `wearApp/.../WatchTalkRecordingTest.kt` (the real recorder on simulated sound through `recordAsk`: quiet
+       past the old 1.25 s, over 60 s, a quiet send, an empty send, a cancel, and the wake word's ending unchanged),
+       `RecordAskTest`, and `wearlink/.../RecordedAskStreamTest.kt` (the watch's stream read back by the phone's
+       reader, as `RecordedAsk.write` makes it).
    - Code: `ui/voice/ManualTalk.kt` (the modes), `VoiceController` (`converseManual`, `awaitTalk`, `talk`, `end`,
      `onForeground`, the Live-or-reason start, and `VoicePhase.Ready`), `VoiceButton` (Ready records), the voice
      panel's and screen's left slot and hints, `ChatViewModel.startVoiceChat`, two `AppSettings` fields and their
@@ -218,7 +237,7 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
 7. **Text sent on the phone silences automatic speech until the next spoken request.**
    - Spoken requests take their place among the inputs when they're sent: the phone's voice chat or Talk sending
      what was said, a spoken answer to Hermes's question, and every watch ask (the watch has no keyboard; its asks are
-     recorded, or written down by the watch's speech recognizer). A Pebble's ask goes through the same relay and takes
+     recorded). A Pebble's ask goes through the same relay and takes
      a ticket too; it asks for no speech, so it only replaces the last watch ask's listener.
    - Text input (`SpeechGate.textInput`), wherever it's typed and sent on the phone: the chat's Send, an edited
      prompt resent, a picked prompt, Explain on a selection, an answer given in the chat (a clarification, a secret, a
@@ -503,7 +522,8 @@ For each conflict or failing test:
 - **Talk.** If upstream changes `startChat`, `hear` or `converseOnce`, keep the `mode` branch before the live check,
   `awaitTalk()` at the top of `hear`'s loop, and `MANUAL_TALK` for Talk's recordings. If it adds a `VoicePhase`, give
   it a place in `voicePress` and the panel's label. If upstream adds its own Live switch, use theirs and drop
-  `phoneLive`.
+  `phoneLive`. On the watch, keep `MainActivity.listen` recording (not the speech recognizer), `Endpoint.TALK` for
+  Talk's recordings, the file-backed `WatchRecorder`, and no size limit in `WearBridgeService`'s reader.
 
 Then update the table above and run:
 

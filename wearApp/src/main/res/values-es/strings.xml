@@ -35,7 +35,6 @@
     <string name="wear_cancel">Cancelar</string>
     <string name="wear_talk_to_hermes">Hablar con Hermes</string>
     <string name="wear_context_full">, contexto al %1$d %%</string>
-    <string name="wear_ask_hermes">Pregunta a Hermes</string>
     <string name="wear_listening">Escuchando… toca al terminar</string>
     <string name="wear_checking_phone">Comprobando tu teléfono…</string>
     <string name="wear_tap_to_stop">Toca para detener</string>

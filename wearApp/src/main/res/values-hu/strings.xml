@@ -35,7 +35,6 @@
     <string name="wear_cancel">Mégse</string>
     <string name="wear_talk_to_hermes">Beszélgetés Hermesszel</string>
     <string name="wear_context_full">, a kontextus %1$d%%-ban telt</string>
-    <string name="wear_ask_hermes">Kérdezd Hermest</string>
     <string name="wear_listening">Figyelek… koppints, ha végeztél</string>
     <string name="wear_checking_phone">A telefon ellenőrzése…</string>
     <string name="wear_tap_to_stop">Koppints a leállításhoz</string>

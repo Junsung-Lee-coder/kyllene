@@ -35,7 +35,6 @@
     <string name="wear_cancel">取消</string>
     <string name="wear_talk_to_hermes">与 Hermes 对话</string>
     <string name="wear_context_full">，上下文已用 %1$d%%</string>
-    <string name="wear_ask_hermes">问问 Hermes</string>
     <string name="wear_listening">正在聆听…说完后点按</string>
     <string name="wear_checking_phone">正在检查你的手机…</string>
     <string name="wear_tap_to_stop">点按停止</string>

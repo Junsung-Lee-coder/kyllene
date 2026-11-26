@@ -16,7 +16,7 @@ import dev.hermeskotlin.wearlink.CallEvents
 import dev.hermeskotlin.wearlink.ChatListRequest
 import dev.hermeskotlin.wearlink.HistoryRequest
 import dev.hermeskotlin.wearlink.CallStart
-import dev.hermeskotlin.wearlink.RecordedAsk
+import dev.hermeskotlin.wearlink.readRecordedAsk
 import dev.hermeskotlin.wearlink.PhoneStatusRequest
 import dev.hermeskotlin.wearlink.RingEnd
 import dev.hermeskotlin.wearlink.RingOn
@@ -33,7 +33,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.koin.android.ext.android.inject
-import java.io.ByteArrayOutputStream
 
 /**
  * Where the watch's messages land on the phone, even with Herald closed: each goes to [WatchRelay], which answers
@@ -103,28 +102,14 @@ class WearBridgeService : WearableListenerService() {
         relay.expect()
         keepUp()
         scope.launch {
-            val bytes = try {
+            val recorded = try {
                 val input = channels.getInputStream(channel).await()
-                withContext(Dispatchers.IO) {
-                    input.use { stream ->
-                        val out = ByteArrayOutputStream()
-                        val buffer = ByteArray(BUFFER)
-                        while (true) {
-                            val read = stream.read(buffer)
-                            if (read < 0) break
-                            out.write(buffer, 0, read)
-                            // A minute of 16 kHz speech is under 2 MB; anything far past that isn't a recording.
-                            if (out.size() > MAX_RECORDING) return@withContext null
-                        }
-                        out.toByteArray()
-                    }
-                }
+                withContext(Dispatchers.IO) { input.use(::readRecordedAsk) }
             } catch (_: Exception) {
                 null
             } finally {
                 runCatching { channels.close(channel) }
             }
-            val recorded = bytes?.let(RecordedAsk::read)
             if (recorded == null || WearPaths.isBotRecording(channel.path) && recorded.first.botProfile.isNullOrBlank()) {
                 // Unreadable: no longer busy, so the service started for it stops.
                 relay.expectedNothing()
@@ -133,10 +118,5 @@ class WearBridgeService : WearableListenerService() {
             pebbleRequests.askedFrom(channel.nodeId)
             relay.ask(channel.nodeId, recorded.first, recorded.second)
         }
-    }
-
-    private companion object {
-        const val BUFFER = 16 * 1024
-        const val MAX_RECORDING = 8 * 1024 * 1024
     }
 }

@@ -109,8 +109,7 @@ class WatchWakeTest {
     @Test
     fun onlyTheWakeStartedRecordingEndsOnTheSetting() {
         assertEquals(WatchRecorder.Endpoint(2_000, 8_000, Long.MAX_VALUE), WatchRecorder.Endpoint.wake(2_000))
-        // Talk's recordings keep their own values (they end on 1.25 s of quiet, or at 60 s: a known gap against §3.2,
-        // outside this change).
-        assertEquals(WatchRecorder.Endpoint(1_250, 8_000, 60_000), WatchRecorder.Endpoint.TALK)
+        // Talk's recordings never end by themselves (§3.2): only Send or leaving ends them.
+        assertEquals(WatchRecorder.Endpoint(Long.MAX_VALUE, Long.MAX_VALUE, Long.MAX_VALUE), WatchRecorder.Endpoint.TALK)
     }
 }

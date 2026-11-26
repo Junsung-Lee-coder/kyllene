@@ -29,11 +29,8 @@
         </intent>
     </queries>
 
-    <!-- The watch's own speech recognizer, used first; apps are hidden from Herald unless it says which it looks up. -->
+    <!-- Apps are hidden from Herald unless it says which it looks up. -->
     <queries>
-        <intent>
-            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
-        </intent>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>

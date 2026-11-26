@@ -95,7 +95,7 @@ class WatchWake(private val context: Context, private val app: HeraldWatch) {
     /** The app's own start when it shows: records the request on its screen, or calls. Null: the app isn't showing. */
     var inApp: (() -> Unit)? = null
 
-    private val recorder = WatchRecorder()
+    private val recorder = WatchRecorder(context)
     private val outsideListening = MutableStateFlow(Listening())
     /** What the wake word started outside the app, which needs the service's microphone: ended with it. */
     private var outsideRecording: Job? = null
@@ -225,9 +225,9 @@ class WatchWake(private val context: Context, private val app: HeraldWatch) {
         val endMs = WakeEndSilence.clamp(store.wake.value.endSilenceMs)
         outsideRecording = scope.launch {
             @Suppress("MissingPermission") // allowed() was checked before listening.
-            recordAsk(outsideListening, link.profileReset.value, { link.profileReset.value }, { onLevel -> recorder.record(WatchRecorder.Endpoint.wake(endMs), onLevel) }) { audio ->
+            recordAsk(outsideListening, link.profileReset.value, { link.profileReset.value }, { onLevel -> recorder.record(WatchRecorder.Endpoint.wake(endMs), onLevel) }, ask = { audio ->
                 link.ask(null, audio, WatchRecorder.MIME_TYPE)
-            }
+            }, drop = { it.delete() })
         }
     }
 

@@ -10,14 +10,17 @@ internal val NOTHING_HEARD = WatchLine.Res(R.string.wear_nothing_heard)
 /**
  * One recorded ask, as the talk screen and the assistant session both make it: [listening] shows the recording
  * and its level, and the audio goes to [ask] only while the phone's profile is still [generation], the one it was
- * made in. The caller has already checked the phone and the microphone.
+ * made in. The caller has already checked the phone and the microphone. [T] is the recording as [record] makes it
+ * (a WAV file from [WatchRecorder]); null is nothing to send.
  */
-internal suspend fun recordAsk(
+internal suspend fun <T : Any> recordAsk(
     listening: MutableStateFlow<Listening>,
     generation: Long,
     currentGeneration: () -> Long,
-    record: suspend (onLevel: (Float) -> Unit) -> ByteArray?,
-    ask: (ByteArray) -> Unit,
+    record: suspend (onLevel: (Float) -> Unit) -> T?,
+    /** A recording not sent (the profile changed meanwhile) is let go here. */
+    drop: (T) -> Unit = {},
+    ask: (T) -> Unit,
 ) {
     listening.value = Listening(recording = true)
     val audio = try {
@@ -36,7 +39,10 @@ internal suspend fun recordAsk(
         if (listening.value.recording) listening.value = Listening()
     }
     when {
-        generation != currentGeneration() -> listening.value = Listening(error = PROFILE_CHANGED)
+        generation != currentGeneration() -> {
+            audio?.let(drop)
+            listening.value = Listening(error = PROFILE_CHANGED)
+        }
         audio == null -> listening.value = Listening(error = NOTHING_HEARD)
         else -> ask(audio)
     }

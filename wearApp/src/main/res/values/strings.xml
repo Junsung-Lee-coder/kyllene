@@ -42,7 +42,6 @@
     <string name="wear_talk_to_hermes">Talk to Hermes</string>
     <!-- Read out after the orb's label; %1$d: how full the context is, in percent -->
     <string name="wear_context_full">, context %1$d%% full</string>
-    <string name="wear_ask_hermes">Ask Hermes</string>
     <string name="wear_listening">Listening… tap when done</string>
     <string name="wear_checking_phone">Checking your phone…</string>
     <string name="wear_tap_to_stop">Tap to stop</string>

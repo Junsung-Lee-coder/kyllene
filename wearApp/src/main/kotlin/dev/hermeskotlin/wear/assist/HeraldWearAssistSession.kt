@@ -60,7 +60,7 @@ class HeraldWearAssistSession(context: Context) :
     private val savedState = SavedStateRegistryController.create(this)
     private val store = ViewModelStore()
     private val work = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val recorder = WatchRecorder()
+    private val recorder = WatchRecorder(context)
     private val listening = MutableStateFlow(Listening())
     private var recording: Job? = null
 
@@ -169,10 +169,10 @@ class HeraldWearAssistSession(context: Context) :
                 listening.value = Listening(error = WatchLink.NO_HERALD)
                 return@launch
             }
-            recordAsk(listening, app.link.profileReset.value, { app.link.profileReset.value }, recorder::record) { audio ->
+            recordAsk(listening, app.link.profileReset.value, { app.link.profileReset.value }, { onLevel -> recorder.record(onLevel) }, ask = { audio ->
                 showsLast.value = true
                 app.link.ask(null, audio, WatchRecorder.MIME_TYPE)
-            }
+            }, drop = { it.delete() })
         }
     }
 

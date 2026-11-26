@@ -35,7 +35,6 @@
     <string name="wear_cancel">Abbrechen</string>
     <string name="wear_talk_to_hermes">Mit Hermes sprechen</string>
     <string name="wear_context_full">, Kontext zu %1$d %% voll</string>
-    <string name="wear_ask_hermes">Hermes fragen</string>
     <string name="wear_listening">Hört zu … tippe, wenn du fertig bist</string>
     <string name="wear_checking_phone">Prüft dein Telefon …</string>
     <string name="wear_tap_to_stop">Zum Stoppen tippen</string>

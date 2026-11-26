@@ -173,13 +173,25 @@ object RecordedAsk {
 
     /** The ask and its audio; null when [bytes] aren't one. */
     fun read(bytes: ByteArray): Pair<WatchAsk, ByteArray>? {
-        if (bytes.size < 4) return null
-        val size = (bytes[0].toInt() and 0xFF shl 24) or (bytes[1].toInt() and 0xFF shl 16) or
-            (bytes[2].toInt() and 0xFF shl 8) or (bytes[3].toInt() and 0xFF)
-        if (size <= 0 || size > bytes.size - 4) return null
+        val size = headerSize(bytes) ?: return null
+        if (size > bytes.size - 4) return null
         val ask = WearJson.decode<WatchAsk>(bytes.copyOfRange(4, 4 + size)) ?: return null
         return ask to bytes.copyOfRange(4 + size, bytes.size)
     }
+
+    /**
+     * Fork: the header's length from the stream's first four bytes, for reading it as it arrives (the audio after it
+     * may be long); null when they can't start one.
+     */
+    fun headerSize(prefix: ByteArray): Int? {
+        if (prefix.size < 4) return null
+        val size = (prefix[0].toInt() and 0xFF shl 24) or (prefix[1].toInt() and 0xFF shl 16) or
+            (prefix[2].toInt() and 0xFF shl 8) or (prefix[3].toInt() and 0xFF)
+        return size.takeIf { it > 0 }
+    }
+
+    /** Fork: the ask from its header's bytes; null when they aren't one. */
+    fun header(bytes: ByteArray): WatchAsk? = WearJson.decode<WatchAsk>(bytes)
 }
 
 /** Stop the turn the ask [askId] started. */
