@@ -123,7 +123,7 @@ class WatchCalls(
         suspend fun end(error: String?) = tell(last.copy(phase = CallPhase.Ended, answerSdp = null, error = error, thinking = false, working = null))
 
         tell(last)
-        val chat = when (val found = relay.chatForCall(start.chatId, start.botProfile, start.defaultRequestId, node, start.scope)) {
+        val chat = when (val found = relay.chatForCall(start.chatId, start.botProfile, start.defaultRequestId, node, start.scope, voiceDefault = true)) {
             is CallChat.Failed -> return end(found.message)
             is CallChat.Ready -> found
         }

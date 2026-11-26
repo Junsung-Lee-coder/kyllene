@@ -12,6 +12,7 @@ import dev.hermeskotlin.core.chat.TurnOutcome
 import dev.hermeskotlin.core.chat.toolInProgress
 import dev.hermeskotlin.core.connection.ConnectionState
 import dev.hermeskotlin.core.connection.GatewayConnection
+import dev.hermeskotlin.core.custom.DefaultVoiceConversation
 import dev.hermeskotlin.core.gateway.GatewayRepository
 import dev.hermeskotlin.core.gateway.GatewayUrl
 import dev.hermeskotlin.core.models.displayModelName
@@ -344,7 +345,9 @@ class WatchRelay(
      * The watch's chat [chatId] (null: a new one) for a live call from the watch, once the gateway is connected and
      * its history loaded (the call opens with it); else what went wrong, for the watch to say.
      */
-    suspend fun chatForCall(chatId: String?, botProfile: String? = null, defaultRequestId: String? = null, node: String? = null, scope: WatchScope? = null): CallChat {
+    suspend fun chatForCall(chatId: String?, botProfile: String? = null, defaultRequestId: String? = null, node: String? = null, scope: WatchScope? = null,
+        /** A call the watch started by voice: with no conversation chosen it goes to the default one ([DefaultVoiceConversation]). */
+        voiceDefault: Boolean = false): CallChat {
         val saved = gateways.current()
         if (saved == null || !auth.hasStoredSession(saved.gatewayUrl) || connection.state.value is ConnectionState.SessionExpired) {
             return failCall(WatchCallLine.SignedOut)
@@ -362,6 +365,7 @@ class WatchRelay(
             return failCall(WatchCallLine.TargetChanged)
         }
         val profile = if (default != null) default.profile else if (scope != null) scope.profile else botProfile ?: profiles.get(gateway)
+        val fallback = if (voiceDefault && default == null && defaultRequestId == null) defaultVoiceChat(gateway, chatId, botProfile, profile) else null
         connection.start(gateway)
         if (withTimeoutOrNull(CONNECT_MS) { connection.state.first { it is ConnectionState.Connected } } == null) {
             connection.retry()
@@ -372,7 +376,7 @@ class WatchRelay(
             // call off mid-word. (Each call is counted before it gets here, this one too.)
             if (calls.load() > 1) return failCall(WatchCallLine.OnAnotherCall)
             if (default != null && !defaultCurrent(default)) return failCall(WatchCallLine.TargetChanged)
-            val storedId = try { if (botProfile == null) chatId else openBot(botProfile) } catch (e: CancellationException) {
+            val storedId = try { if (botProfile == null) chatId ?: fallback else openBot(botProfile) } catch (e: CancellationException) {
                 throw e
             } catch (e: CallRefused) {
                 return failCall(e.line)
@@ -389,6 +393,12 @@ class WatchRelay(
     }
 
     private suspend fun failCall(line: WatchCallLine) = CallChat.Failed(words.say(line))
+
+    /** Fork: the Default Call Target's conversation for a watch voice request that chose none, else null (stock). */
+    private suspend fun defaultVoiceChat(gateway: GatewayUrl, chatId: String?, botProfile: String?, profile: String?): String? {
+        val targets = withTimeoutOrNull(CONNECT_MS) { settings.settings.filterNotNull().first() }?.callTargets ?: return null
+        return DefaultVoiceConversation.storedSessionFor(targets[gateway.value], chatId, botProfile, profile)
+    }
 
     /** Why a call (or its Default Call Target) can't go ahead: said in the app's language once caught, else in English. */
     private class CallRefused(val line: WatchCallLine) : Exception(line.english)
@@ -558,7 +568,7 @@ class WatchRelay(
         last = last.copy(scope = WatchScope(gateway.value, profile))
         connection.start(gateway)
 
-        val storedId = if (botProfile == null) ask.chatId else try {
+        val storedId = if (botProfile == null) ask.chatId ?: defaultVoiceChat(gateway, ask.chatId, null, profile) else try {
             if (withTimeoutOrNull(CONNECT_MS) { connection.state.first { it is ConnectionState.Connected } } == null) {
                 connection.retry()
                 return fail("Kyllene can't reach your gateway right now.")
