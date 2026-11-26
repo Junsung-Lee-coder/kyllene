@@ -278,6 +278,11 @@ class WatchLink(
     /** The ask whose voice was stopped here: its clips still arriving are dropped. */
     @Volatile private var silenced: String? = null
 
+    init {
+        // Fork (requirements §6): earbuds gone mid-reply silence it, here and on the phone making its clips.
+        speech.onOutputLost = ::quiet
+    }
+
     /**
      * Sends what was said or typed; with [audio] (a recording's file), the phone has the gateway transcribe it first.
      * The file is streamed to the phone and deleted once sent, or once the ask goes no further.
@@ -287,7 +292,7 @@ class WatchLink(
         dismissCall()
         val id = UUID.randomUUID().toString()
         val chat = store.chat.value
-        val ask = WatchAsk(id, text.orEmpty().trim(), chat.id, speak = store.speak.value && speech.canPlay(), audioType = audioType, botProfile = chat.botProfile, scope = chat.scope, newChat = chat.newChat)
+        val ask = WatchAsk(id, text.orEmpty().trim(), chat.id, speak = store.speak.value && speech.canPlay(), audioType = audioType, botProfile = chat.botProfile, scope = chat.scope, newChat = chat.newChat, earphones = speech.earphones())
         _turn.value = WatchTurn(id, text?.trim(), ReplyUpdate(id, if (audio != null) ReplyPhase.Transcribing else ReplyPhase.Sending, chatId = chat.id, title = chat.title))
         if (chat.botProfile != null && !botChats) {
             audio?.delete()

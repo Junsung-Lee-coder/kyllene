@@ -38,6 +38,10 @@ internal object HeadsetPorts {
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_HEARING_AID,
     )
 
+    /** Fork (requirements §6): earphones or a headset are connected, whatever their microphone. */
+    fun earphones(audioManager: AudioManager): Boolean =
+        runCatching { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type in EARPHONES || it.type in HEADSETS_WITH_MIC } }.getOrDefault(false)
+
     fun of(audioManager: AudioManager): HeadsetAudio.Ports {
         val outputs = runCatching { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).map { it.type } }.getOrDefault(emptyList())
         // Before Android 12 there's no communication device to pick: a Bluetooth headset's microphone isn't reachable.

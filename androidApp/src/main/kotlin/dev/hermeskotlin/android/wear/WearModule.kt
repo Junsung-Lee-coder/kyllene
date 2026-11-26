@@ -9,6 +9,7 @@ import dev.hermeskotlin.android.pebble.RoutingOutbox
 import dev.hermeskotlin.core.wear.WatchOutbox
 import dev.hermeskotlin.core.wear.WatchRelay
 import dev.hermeskotlin.ui.voice.CatalogueWatchCallWords
+import dev.hermeskotlin.ui.voice.PhoneReplyVoice
 import dev.hermeskotlin.ui.voice.WatchCalls
 import dev.hermeskotlin.ui.calls.PhoneCallModel
 import org.koin.android.ext.koin.androidContext
@@ -24,8 +25,9 @@ val wearModule = module {
     single<WatchOutbox> { RoutingOutbox(PhoneOutbox(androidContext()), get()) }
     single { PebbleRequests(get(), get(), get(), get(), get()) }
     single { PebbleRinger(androidContext(), get(), get(), get(), get()) }
-    // Fork: a watch's spoken ask is a voice request; its reply isn't read after text sent on the phone (SpeechGate).
-    single { WatchRelay(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), CatalogueWatchCallWords, speechGate = get()) }
+    // Fork: a watch's spoken ask is a voice request; its reply isn't read after text sent on the phone (SpeechGate),
+    // and is read on the phone when that's where it belongs (requirements §6, ReplyOutput).
+    single { WatchRelay(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), CatalogueWatchCallWords, speechGate = get(), phoneOutput = PhoneReplyVoice(get())) }
     // Fork: the watch's live calls are kept with the phone's (LiveTranscripts).
     single { WatchCalls(get(), get(), get(), get(), get(), transcripts = get(), speechGate = get(), settings = get()) }
     single { WearRequests(get(), get()) }

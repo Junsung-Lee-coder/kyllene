@@ -1,8 +1,11 @@
 package dev.hermeskotlin.ui.voice
 
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 
 /*
@@ -33,6 +36,9 @@ object VoiceMedia {
     internal fun probe(owner: Any, busy: (() -> Boolean)?) {
         probes.update { if (busy == null) it - owner else it + (owner to busy) }
     }
+
+    /** Fork (requirements §6): whether a voice other than [owner] has the media, as each changes. */
+    internal fun busyApartFrom(owner: Any): Flow<Boolean> = owners.map { (it - owner).isNotEmpty() }.distinctUntilChanged()
 }
 
 /** What the phone's wake word is actually doing, for Settings to say: never what was asked for, only what is. */

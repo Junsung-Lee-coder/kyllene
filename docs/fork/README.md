@@ -259,6 +259,29 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      account isn't known yet (a binding still pending), or text's gateway isn't known, it fails toward silence: such
      text reaches every account of the gateway (or everything), and such a request is reached by any text in its
      gateway. A reply is never read once its gateway's account isn't the one that asked.
+   - **Which device reads a watch ask's reply** (requirements §6), once nothing silences it: earphones connected to
+     only the phone or only the watch take it; with none, the device the latest voice request (in the same account)
+     was made on, so a watch ask's reply that comes after a newer voice request on the phone is read on the phone.
+     It's read once, on one device: when it's the phone's, the watch is told the reply has no voice there and gets no
+     clips. The phone reads it through the same route as its own Talk replies, only while no other voice has its
+     media (a call, a voice chat, dictation, Read aloud), else on the watch as before; earphones that go away stop it
+     and nothing more plays, never on to the phone's speaker. Text stops it at once. The watch says with each ask
+     whether earphones are connected to it (`WatchAsk.earphones`); an older watch doesn't, and keeps its voice.
+     - Earphones on both devices: no order is agreed for that yet, so the reply stays where it was asked, as before.
+     - The watch's earbuds going away mid-reply silence it there (`SpeechOut`, on `ACTION_AUDIO_BECOMING_NOISY`, as
+       Android's [output guide](https://developer.android.com/media/platform/output) describes), and the phone stops
+       making its clips.
+     - Not yet: the phone's own replies (its Talk and voice chat) are read on the phone only. Reading them on the watch
+       (earphones on the watch only, or a newer watch ask) would need the watch to play clips for a turn it didn't
+       ask, and the phone to know the watch's earphones without a watch ask; neither exists on the link yet.
+     - Code: `core/custom/ReplyOutput.kt` (`ReplyOutput.choose`, `PhoneReplyOutput`), `SpeechGate` (each voice
+       request's device, `latestVoice`), `WatchRelay.answer`/`readOnPhone`, `ui/voice/PhoneReplyVoice.kt` (over
+       `SpeechPlayer.chainedChatAudio`, `VoiceMedia`), `SpeechPlayer.earphonesConnected`, `WearModule`, the watch's
+       `SpeechOut` (`earphones`, `onOutputLost`) and `WatchLink.ask`.
+     - Tests: `core/custom/ReplyOutputTest.kt`, `core/wear/WatchReplyOutputTest.kt` (the real relay and gate: phone
+       earphones, watch earphones, both, the latest voice request, another account's, an older watch, a busy phone,
+       text before and during the reading, an account switch, lost earphones), `ui/voice/PhoneReplyVoiceTest.kt` and
+       `wearApp/.../SpeechOutEarphonesTest.kt`.
    - Read aloud, pressed by hand, is never silenced. The assistant panel's voice is dictation only and reads nothing
      aloud. In memory only: a reply can't outlive the app's process.
    - Code: `core/custom/SpeechGate.kt` (with `typed`), its `CoreModule` single; `VoiceController` (tickets, `mayRead`,

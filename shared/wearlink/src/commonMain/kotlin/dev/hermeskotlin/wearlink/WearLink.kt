@@ -161,6 +161,11 @@ data class WatchAsk(
      * starts a new chat even when a default conversation is set. Left out when false, so either side may be older.
      */
     val newChat: Boolean = false,
+    /**
+     * Fork (requirements §6): whether earphones were connected to the watch when it asked, for the phone to pick which
+     * device reads the reply aloud. Null from an older watch: the phone then leaves the reply's voice on the watch.
+     */
+    val earphones: Boolean? = null,
 )
 
 /** What a [WearPaths.recordingPath] channel carries: the ask's length (4 bytes, big-endian), the ask, then the audio. */

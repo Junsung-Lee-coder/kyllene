@@ -1,6 +1,9 @@
 package dev.hermeskotlin.wear
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -10,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +48,42 @@ class SpeechOut(private val context: Context) {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var pendingSay: String? = null
+
+    /**
+     * Fork (requirements §6): earphones that a reply read here would go to are gone, mid-reply: the reply is silenced
+     * there ([WatchLink.quiet]), never moved on to the watch's speaker. Unset, it only stops.
+     */
+    var onOutputLost: (() -> Unit)? = null
+
+    /**
+     * Fork: Android's warning that audio is about to move to the watch's own speaker (earbuds disconnected), listened
+     * for only while a reply plays, as Android's guide on outputs advises.
+     */
+    private val becomingNoisy = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != AudioManager.ACTION_AUDIO_BECOMING_NOISY || !_speaking.value) return
+            main.post { if (_speaking.value) onOutputLost?.invoke() ?: stop() }
+        }
+    }
+    private var listeningForUnplug = false
+
+    /** Fork (requirements §6): earphones or a headset are connected to the watch, to say so with an ask. */
+    fun earphones(): Boolean {
+        val audio = context.getSystemService(AudioManager::class.java) ?: return false
+        val earphones = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) EARPHONES + AudioDeviceInfo.TYPE_BLE_HEADSET else EARPHONES
+        return audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type in earphones }
+    }
+
+    private fun speakingNow(on: Boolean) {
+        _speaking.value = on
+        if (on == listeningForUnplug) return
+        listeningForUnplug = on
+        if (on) {
+            runCatching { ContextCompat.registerReceiver(context, becomingNoisy, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY), ContextCompat.RECEIVER_EXPORTED) }
+        } else {
+            runCatching { context.unregisterReceiver(becomingNoisy) }
+        }
+    }
 
     /**
      * Whether anything would be heard: a speaker, or earbuds or a headset over Bluetooth. Many watches have
@@ -104,7 +144,7 @@ class SpeechOut(private val context: Context) {
         askId = null
         pendingSay = null
         tts?.stop()
-        _speaking.value = false
+        speakingNow(false)
         _sounding.value = false
     }
 
@@ -123,7 +163,7 @@ class SpeechOut(private val context: Context) {
             if (next < count) main.postDelayed(giveUp, CLIP_WITHIN_MS)
             return
         }
-        _speaking.value = true
+        speakingNow(true)
         val media = MediaPlayer()
         player = media
         playing = file
@@ -136,7 +176,7 @@ class SpeechOut(private val context: Context) {
                 playing = null
             }
             next++
-            if (next >= count) _speaking.value = false else pump()
+            if (next >= count) speakingNow(false) else pump()
         }
         try {
             media.setAudioAttributes(
@@ -159,7 +199,7 @@ class SpeechOut(private val context: Context) {
     }
 
     private fun speakNow(engine: TextToSpeech, text: String) {
-        _speaking.value = true
+        speakingNow(true)
         engine.language = Locale.getDefault()
         engine.setOnUtteranceProgressListener(
             object : UtteranceProgressListener() {
@@ -168,13 +208,13 @@ class SpeechOut(private val context: Context) {
                 }
 
                 override fun onDone(utteranceId: String?) {
-                    _speaking.value = false
+                    main.post { speakingNow(false) }
                     _sounding.value = false
                 }
 
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
-                    _speaking.value = false
+                    main.post { speakingNow(false) }
                     _sounding.value = false
                 }
             },
@@ -198,6 +238,14 @@ class SpeechOut(private val context: Context) {
 
         /** How long the next clip may take after the last one ended: the gateway makes one in a few seconds. */
         const val CLIP_WITHIN_MS = 20_000L
+        /** Fork: outputs that are earphones or a headset, not a speaker. */
+        val EARPHONES = setOf(
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+        )
         val AUDIBLE = setOf(
             AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,

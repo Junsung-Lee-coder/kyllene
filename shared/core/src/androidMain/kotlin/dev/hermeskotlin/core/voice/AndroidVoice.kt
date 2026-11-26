@@ -394,6 +394,9 @@ class AndroidSpeechPlayer(
     /** Fork: earphones are in whose microphone this chat can't use; it listens through the phone's own. */
     override fun headsetMicUnavailable(): Boolean = synchronized(lock) { HeadsetAudio.micUnavailable(ports()) }
 
+    /** Fork (requirements §6): earphones or a headset are connected to the phone. */
+    override fun earphonesConnected(): Boolean = HeadsetPorts.earphones(audioManager)
+
     /** Fork: what's connected, as [HeadsetAudio] reads it. */
     private fun ports(): HeadsetAudio.Ports = HeadsetPorts.of(audioManager)
 

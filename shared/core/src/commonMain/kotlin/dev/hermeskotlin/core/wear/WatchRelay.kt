@@ -18,7 +18,10 @@ import dev.hermeskotlin.core.chat.toolInProgress
 import dev.hermeskotlin.core.connection.ConnectionState
 import dev.hermeskotlin.core.connection.GatewayConnection
 import dev.hermeskotlin.core.custom.DefaultVoiceConversation
+import dev.hermeskotlin.core.custom.PhoneReplyOutput
+import dev.hermeskotlin.core.custom.ReplyOutput
 import dev.hermeskotlin.core.custom.SpeechGate
+import dev.hermeskotlin.core.custom.VoiceDevice
 import dev.hermeskotlin.core.gateway.GatewayRepository
 import dev.hermeskotlin.core.gateway.GatewayUrl
 import dev.hermeskotlin.core.models.displayModelName
@@ -116,6 +119,11 @@ class WatchRelay(
     private val words: WatchCallWords = WatchCallWords.English,
     /** Fork: text sent on the phone silences a watch ask's reply voice (requirements §6.1); null voices every one. */
     private val speechGate: SpeechGate? = null,
+    /**
+     * Fork (requirements §6): the phone reading a watch ask's reply when [ReplyOutput] picks it (earphones on the
+     * phone only, or none anywhere and the latest voice request made on the phone); null: always the watch.
+     */
+    private val phoneOutput: PhoneReplyOutput? = null,
 ) {
     /** Fork: a conversation's stored messages for the watch's reader, read only when it asks (requirements §9.1). */
     private val historyReader = WatchHistoryReader(gateways, auth, profiles, connection, sessions, bots)
@@ -618,7 +626,7 @@ class WatchRelay(
         // Fork: every watch ask is spoken (the watch has no keyboard): a voice request, whose reply is voiced unless
         // text is sent on the phone after it. The last ask's voice no longer listens for that.
         watchSpeechWatch.exchange(null)?.invoke()
-        val ticket = speechGate?.voiceInput(gateway)
+        val ticket = speechGate?.voiceInput(gateway, VoiceDevice.Watch)
         val voicing: suspend () -> Boolean = { speechGate?.allowsNow(ticket) ?: true }
         val botProfile = ask.botProfile
         val owner = ask.scope
@@ -708,8 +716,11 @@ class WatchRelay(
         // Only punctuation left ("?!", say) has no words to voice and makes no pieces: nothing to read, not "coming".
         // Fork: not voiced when text was sent on the phone since the ask (SpeechGate).
         val spoken = if (ask.speak && reply?.outcome != TurnOutcome.Interrupted && voicing()) speakableText(replyText).takeIf(::hasWordsToSay).orEmpty() else ""
-        tell(done.copy(phase = ReplyPhase.Done, text = clipForWatch(replyText), speech = if (spoken.isEmpty()) ReplySpeech.Off else ReplySpeech.Coming))
+        // Fork (requirements §6): read once, on one device: the phone, when it's picked and its voice is free.
+        val onPhone = spoken.isNotEmpty() && readsOnPhone(ask, ticket)
+        tell(done.copy(phase = ReplyPhase.Done, text = clipForWatch(replyText), speech = if (spoken.isEmpty() || onPhone) ReplySpeech.Off else ReplySpeech.Coming))
         if (spoken.isEmpty()) return
+        if (onPhone) return readOnPhone(spoken, gateway, profile, voicing)
         // Fork: text sent on the phone while it's voiced (in clips, or by the watch's own voice) stops it there: the
         // watch is told the reply has no voice after all, once.
         speechGate?.let { gate ->
@@ -719,6 +730,48 @@ class WatchRelay(
         }
         if (!speak(node, ask.id, spoken, gateway, profile, voicing) && voicing()) {
             tell(last.copy(speech = ReplySpeech.Unavailable))
+        }
+    }
+
+    /**
+     * Fork (requirements §6): whether [ask]'s reply is read on the phone rather than the watch. An older watch, which
+     * doesn't say whether it has earphones, keeps it.
+     */
+    private fun readsOnPhone(ask: WatchAsk, ticket: SpeechGate.Ticket?): Boolean {
+        val phone = phoneOutput ?: return false
+        val watchEarphones = ask.earphones ?: return false
+        val device = ReplyOutput.choose(VoiceDevice.Watch, speechGate?.latestVoice(ticket), phone.earphones(), watchEarphones)
+        return device == VoiceDevice.Phone && phone.free()
+    }
+
+    /**
+     * Fork: reads [text] on the phone, clip by clip, while [voicing] allows. Text sent meanwhile stops it at once, the
+     * clip playing too; the watch was already told the reply has no voice there, so it's never heard twice.
+     */
+    private suspend fun readOnPhone(text: String, gateway: GatewayUrl, profile: String?, voicing: suspend () -> Boolean) {
+        val phone = phoneOutput ?: return
+        val chunks = speechChunks(text, maxChars = WATCH_SPEECH_CHARS)
+        val lease = scope.launch { audio.ttsLease(gateway, true, profile) }
+        val reading = scope.launch {
+            phone.play { index ->
+                if (index >= chunks.size || !voicing()) null
+                else when (val result = audio.speak(gateway, chunks[index], profile)) {
+                    is ApiResult.Success -> result.value
+                    else -> null
+                }
+            }
+        }
+        speechGate?.let { gate ->
+            val gated = gate.scope(gateway)
+            watchSpeechWatch.exchange(gate.onText { if (gate.reaches(it, gated)) reading.cancel() })?.invoke()
+        }
+        try {
+            reading.join()
+        } finally {
+            scope.launch {
+                lease.join()
+                audio.ttsLease(gateway, false, profile)
+            }
         }
     }
 

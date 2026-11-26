@@ -175,6 +175,9 @@ interface SpeechPlayer {
     /** Fork: earphones are in whose microphone a chat can't use, so it listens through the device's own. */
     fun headsetMicUnavailable(): Boolean = false
 
+    /** Fork (requirements §6): earphones or a headset are connected; false for a player that can't tell. */
+    fun earphonesConnected(): Boolean = false
+
     /** Plays the local connection cue once; cancelling stops it. Unsupported devices stay silent. */
     suspend fun playRingback() = Unit
 

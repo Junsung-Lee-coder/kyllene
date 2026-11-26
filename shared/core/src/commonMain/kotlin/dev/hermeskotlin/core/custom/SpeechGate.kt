@@ -35,11 +35,23 @@ class SpeechGate(
     /** A gateway and its account; [owner] null when the account isn't known. */
     data class Scope(val gateway: String, val owner: String?)
 
-    /** A voice request's place among the inputs. */
-    class Ticket internal constructor(val scope: Scope, internal val order: Long, internal val gateway: GatewayUrl)
+    /** A voice request's place among the inputs, and (fork, §6) the device it was made on. */
+    class Ticket internal constructor(
+        val scope: Scope,
+        internal val order: Long,
+        internal val gateway: GatewayUrl,
+        val device: VoiceDevice = VoiceDevice.Phone,
+    )
 
-    /** [lastText]: by the text's scope (null: its gateway wasn't known), the order of its latest text input. */
-    private class State(val inputs: Long = 0, val lastText: Map<Scope?, Long> = emptyMap())
+    /**
+     * [lastText]: by the text's scope (null: its gateway wasn't known), the order of its latest text input.
+     * [lastVoice]: by scope, the order and device of its latest voice input.
+     */
+    private class State(
+        val inputs: Long = 0,
+        val lastText: Map<Scope?, Long> = emptyMap(),
+        val lastVoice: Map<Scope, Pair<Long, VoiceDevice>> = emptyMap(),
+    )
 
     private val state = AtomicReference(State())
     private val observers = AtomicReference<List<(Scope?) -> Unit>>(emptyList())
@@ -58,10 +70,21 @@ class SpeechGate(
         else -> text.owner == scope.owner
     }
 
-    /** A voice request in [gateway] is being sent: its replies are read unless text follows. */
-    suspend fun voiceInput(gateway: GatewayUrl): Ticket {
+    /** A voice request in [gateway], made on [device], is being sent: its replies are read unless text follows. */
+    suspend fun voiceInput(gateway: GatewayUrl, device: VoiceDevice = VoiceDevice.Phone): Ticket {
         val scope = scope(gateway)
-        return Ticket(scope, state.updateAndFetch { State(it.inputs + 1, it.lastText) }.inputs, gateway)
+        val order = state.updateAndFetch { State(it.inputs + 1, it.lastText, it.lastVoice + (scope to (it.inputs + 1 to device))) }.inputs
+        return Ticket(scope, order, gateway, device)
+    }
+
+    /**
+     * Fork (requirements §6): the device of the latest voice request [ticket]'s scope can see (its own, or a later one
+     * where the same account asked); null with no ticket.
+     */
+    fun latestVoice(ticket: Ticket?): VoiceDevice? {
+        ticket ?: return null
+        return state.load().lastVoice.filter { (scope, _) -> scope.gateway == ticket.scope.gateway && reaches(scope, ticket.scope) }
+            .values.maxByOrNull { it.first }?.second
     }
 
     /**
@@ -70,7 +93,7 @@ class SpeechGate(
      */
     suspend fun textInput(gateway: GatewayUrl?) {
         val scope = gateway?.let { scope(it) }
-        state.updateAndFetch { State(it.inputs + 1, it.lastText + (scope to it.inputs + 1)) }
+        state.updateAndFetch { State(it.inputs + 1, it.lastText + (scope to it.inputs + 1), it.lastVoice) }
         for (stop in observers.load()) runCatching { stop(scope) }
     }
 
