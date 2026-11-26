@@ -101,7 +101,9 @@ class AndroidWakeRecognizer(
     /** The system's recognizer unless it's this app's own; else another installed one; null if there's none. */
     private fun component(): ComponentName? {
         val own = context.packageName
-        val chosen = Settings.Secure.getString(context.contentResolver, VOICE_RECOGNITION_SERVICE)
+        // The system's choice is kept under a key the SDK doesn't list: a platform that won't let it be read just means
+        // the installed services are looked at instead.
+        val chosen = runCatching { Settings.Secure.getString(context.contentResolver, VOICE_RECOGNITION_SERVICE) }.getOrNull()
             ?.let(ComponentName::unflattenFromString)?.takeIf { it.packageName != own }
         if (chosen != null) return chosen
         return context.packageManager.queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)

@@ -203,18 +203,28 @@ class VoiceController(
                 chat.phase !in IDLE_PHASES || reading.key != null || dictation.active
             }.collect { VoiceMedia.report(this@VoiceController, it) }
         }
-        scope.coroutineContext[Job]?.invokeOnCompletion { VoiceMedia.report(this@VoiceController, false) }
+        VoiceMedia.probe(this) { _chat.value.phase !in IDLE_PHASES || _reading.value.key != null || _dictation.value.active }
+        scope.coroutineContext[Job]?.invokeOnCompletion {
+            VoiceMedia.report(this@VoiceController, false)
+            VoiceMedia.probe(this@VoiceController, null)
+        }
     }
 
     /** Fork: the next recording ends on this quiet spell: it was started by the wake word. Once; null: none waiting. */
     private var wakeEndMs: Long? = null
 
     /**
-     * Fork (requirements §5): the next request this chat records was started by the wake word, so a quiet spell of
-     * [endMs] ends it (nothing said within [WAKE_IDLE_MS], nothing is sent). Talk's own recordings aren't affected.
+     * Fork (requirements §5): Talk is Ready and the wake word was heard: the next request is recorded, and a quiet
+     * spell of [endMs] ends it (nothing said within [WAKE_IDLE_MS], nothing is sent). Only when the press is taken:
+     * false, and nothing armed, otherwise, so a later Mic press is never cut short by it.
      */
-    fun armWake(endMs: Int) {
+    fun wakeTalk(endMs: Int): Boolean {
+        val presses = talkPresses
+        if (_chat.value.phase != VoicePhase.Ready || chatJob?.isActive != true || presses == null) return false
         wakeEndMs = WakeEndSilence.clamp(endMs).toLong()
+        if (presses.trySend(Unit).isSuccess) return true
+        wakeEndMs = null
+        return false
     }
     private var speechJob: Job? = null
     /** The gateway whose speech socket couldn't open in this chat; its replies are read out once they're done. */
@@ -322,8 +332,14 @@ class VoiceController(
          * Live silence), read now. Talk never ends on silence.
          */
         liveSilenceSeconds: Int = LIVE_SILENCE_DEFAULT_SECONDS,
+        /**
+         * Fork (requirements §5): this chat was started by the wake word: its first recording ends on this quiet spell.
+         * Null: as ever. Every start sets it, so none is left over from before.
+         */
+        wakeEndMs: Int? = null,
     ) {
         if (chatJob?.isActive == true) return
+        this.wakeEndMs = wakeEndMs?.let { WakeEndSilence.clamp(it).toLong() }
         this.readyAway = readyAway
         cancelDictation()
         // The voice chat has the speaker now.
@@ -592,7 +608,11 @@ class VoiceController(
 
     /** Fork: Talk is Ready: record the next request (the Mic button, or the earphones). */
     fun talk() {
-        if (_chat.value.phase == VoicePhase.Ready && chatJob?.isActive == true) talkPresses?.trySend(Unit)
+        if (_chat.value.phase == VoicePhase.Ready && chatJob?.isActive == true) {
+            // Fork: a press by hand records as Talk does, whatever a wake word asked for before.
+            wakeEndMs = null
+            talkPresses?.trySend(Unit)
+        }
     }
 
     /**

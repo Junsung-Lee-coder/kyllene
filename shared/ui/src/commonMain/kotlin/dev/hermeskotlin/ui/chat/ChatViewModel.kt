@@ -746,7 +746,8 @@ class ChatViewModel(
         if (draft.start == DraftStart.Typing) viewModelScope.launch { _requests.send(ChatRequest.FocusComposer) }
     }
 
-    fun startVoiceChat(ringback: Boolean = false) {
+    /** [wakeEndMs]: fork (requirements §5), the wake word started it, and its first recording ends on that quiet spell. */
+    fun startVoiceChat(ringback: Boolean = false, wakeEndMs: Int? = null) {
         val chat = session.value ?: return
         val target = target ?: return
         val now = settings.settings.value ?: AppSettings()
@@ -760,6 +761,7 @@ class ChatViewModel(
             mode = phoneVoiceMode(now.phoneLive),
             readyAway = { (settings.settings.value ?: AppSettings()).backgroundEarphoneButton },
             liveSilenceSeconds = now.phoneLiveSilenceSeconds,
+            wakeEndMs = wakeEndMs,
         )
     }
 

@@ -51,16 +51,19 @@ internal fun voicePress(chat: VoiceChatState, canStart: Boolean): VoicePress = w
  * [press]. Main thread only.
  */
 object VoiceButton {
-    private class Target(val owner: Any, val voice: VoiceController, val start: () -> Unit)
+    private class Target(val owner: Any, val voice: VoiceController, val start: () -> Unit, val wakeStart: ((Int) -> Unit)? = null)
 
     private val targets = MutableStateFlow<List<Target>>(emptyList())
 
     /** Presses acted on, by device and the time they went down; their ups and repeats are theirs too. */
     private val acted = ArrayDeque<Pair<Int, Long>>()
 
-    /** [voice] is the chat's on screen; [start] starts it as the chat's Voice button does. */
-    fun bind(owner: Any, voice: VoiceController, start: () -> Unit) {
-        targets.value = targets.value.filterNot { it.owner === owner } + Target(owner, voice, start)
+    /**
+     * [voice] is the chat's on screen; [start] starts it as the chat's Voice button does. Fork: [wakeStart] starts it
+     * for the wake word, its first recording ending on the given quiet spell; none: the wake word doesn't start it.
+     */
+    fun bind(owner: Any, voice: VoiceController, wakeStart: ((Int) -> Unit)? = null, start: () -> Unit) {
+        targets.value = targets.value.filterNot { it.owner === owner } + Target(owner, voice, start, wakeStart)
     }
 
     fun unbind(owner: Any) {
@@ -135,17 +138,12 @@ object VoiceButton {
      */
     fun wake(endMs: Int): Boolean {
         val target = targets.value.lastOrNull()?.takeIf(::inFront) ?: return false
+        // Any voice with the microphone or the speaker, the composer's dictation too (the chat's phase stays Off then):
+        // the wake word starts nothing over it.
+        if (VoiceMedia.busyNow()) return false
         return when (target.voice.chat.value.phase) {
-            VoicePhase.Off -> {
-                target.voice.armWake(endMs)
-                target.start()
-                true
-            }
-            VoicePhase.Ready -> {
-                target.voice.armWake(endMs)
-                target.voice.talk()
-                true
-            }
+            VoicePhase.Off -> target.wakeStart?.let { it(endMs); true } ?: false
+            VoicePhase.Ready -> target.voice.wakeTalk(endMs)
             else -> false
         }
     }

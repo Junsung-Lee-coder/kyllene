@@ -17,13 +17,21 @@ internal val IDLE_PHASES = setOf(VoicePhase.Off, VoicePhase.Ready)
 object VoiceMedia {
     private val owners = MutableStateFlow<Set<Any>>(emptySet())
     private val _busy = MutableStateFlow(false)
+    private val probes = MutableStateFlow<Map<Any, () -> Boolean>>(emptyMap())
 
-    /** True while one does: the wake word doesn't listen then. */
+    /** True while one does: the wake word doesn't listen then. Told as each changes: for watching, not for a check. */
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    /** Whether one does right now, asked of each: for the check just before the wake word starts anything. */
+    fun busyNow(): Boolean = probes.value.values.any { it() }
 
     internal fun report(owner: Any, busy: Boolean) {
         owners.update { if (busy) it + owner else it - owner }
         _busy.value = owners.value.isNotEmpty()
+    }
+
+    internal fun probe(owner: Any, busy: (() -> Boolean)?) {
+        probes.update { if (busy == null) it - owner else it + (owner to busy) }
     }
 }
 

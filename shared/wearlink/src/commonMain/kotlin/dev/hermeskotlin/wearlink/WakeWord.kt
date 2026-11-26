@@ -1,6 +1,8 @@
 package dev.hermeskotlin.wearlink
 
 import kotlinx.coroutines.CancellationException
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -156,17 +158,19 @@ object WakeRules {
  * The first claim of the last [WAKE_CLAIM_TTL_MS] wins; the same claim asked again gets the same answer. On the phone,
  * for its own wake word and the watch's alike. [now]: a monotonic clock in milliseconds.
  */
+@OptIn(ExperimentalAtomicApi::class)
 class WakeClaims(private val now: () -> Long) {
-    private var holder: Pair<String, Long>? = null
+    // Asked from the phone's main thread and the relay's coroutines alike: one compare-and-set decides.
+    private val holder = AtomicReference<Pair<String, Long>?>(null)
 
     fun claim(id: String): Boolean {
-        val t = now()
-        val held = holder?.takeIf { t - it.second < WAKE_CLAIM_TTL_MS }
-        if (held == null) {
-            holder = id to t
-            return true
+        while (true) {
+            val t = now()
+            val current = holder.load()
+            val held = current?.takeIf { t - it.second < WAKE_CLAIM_TTL_MS }
+            if (held != null) return held.first == id
+            if (holder.compareAndSet(current, id to t)) return true
         }
-        return held.first == id
     }
 }
 

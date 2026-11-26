@@ -46,10 +46,7 @@ class WakeVoice(
     fun wake() {
         val now = settings.settings.value ?: AppSettings()
         when (voice.chat.value.phase) {
-            VoicePhase.Ready -> {
-                voice.armWake(now.wakeEndSilenceMs)
-                voice.talk()
-            }
+            VoicePhase.Ready -> voice.wakeTalk(now.wakeEndSilenceMs)
             VoicePhase.Off -> scope.launch {
                 val chat = relay.chatForCall(null, voiceDefault = true) as? CallChat.Ready ?: return@launch
                 if (!counted) {
@@ -57,13 +54,13 @@ class WakeVoice(
                     counted = true
                     relay.callStarted()
                 }
-                voice.armWake(now.wakeEndSilenceMs)
                 voice.startChat(
                     chat.session, chat.gateway, chat.profile, now.voicePause.millis,
                     mode = phoneVoiceMode(now.phoneLive),
                     // Out of sight is where it lives: Ready stays.
                     readyAway = { true },
                     liveSilenceSeconds = now.phoneLiveSilenceSeconds,
+                    wakeEndMs = now.wakeEndSilenceMs,
                 )
                 voice.chat.first { it.phase == VoicePhase.Off }
                 if (counted) {

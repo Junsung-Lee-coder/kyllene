@@ -512,8 +512,12 @@ fun ChatScreen(
         }
     }
     val buttonOwner = remember { Any() }
+    // Fork (requirements §5): the wake word starts this chat's voice too, when it can speak replies, mic allowed.
+    val startFromWake by rememberUpdatedState { endMs: Int ->
+        if (hasSpeechPlayback) microphone.withMicrophone(onDenied = { notice = voiceNeedsMic }) { viewModel.startVoiceChat(wakeEndMs = endMs) }
+    }
     DisposableEffect(viewModel) {
-        VoiceButton.bind(buttonOwner, viewModel.voice) { startFromButton() }
+        VoiceButton.bind(buttonOwner, viewModel.voice, wakeStart = { endMs -> startFromWake(endMs) }) { startFromButton() }
         onDispose { VoiceButton.unbind(buttonOwner) }
     }
     // Fork: while this chat is resumed, the button is held for it, voice off too; paused, it goes back unless voice is on.
