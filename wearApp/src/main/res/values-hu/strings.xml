@@ -98,4 +98,44 @@
     <string name="wear_assistant_set">A Kyllene válaszol a gombra</string>
     <string name="wear_assistant_refused">Nincs beállítva. Koppints az újrapróbáláshoz</string>
     <string name="wear_assistant_unset">A Kyllene beállítása asszisztensként</string>
+
+    <!-- Fork: the conversation reader -->
+    <string name="wear_read_chat">Csevegés olvasása</string>
+    <string name="wear_reader_earlier">Korábbiak</string>
+    <string name="wear_reader_reading">Olvasás…</string>
+    <string name="wear_reader_up_to_date">Naprakész</string>
+    <string name="wear_reader_offline">Offline · ezen az órán mentve</string>
+    <string name="wear_reader_earlier_offline">A korábbi üzenetek nincsenek mentve ezen az órán</string>
+    <string name="wear_reader_start">A beszélgetés eleje</string>
+    <string name="wear_reader_locked">A telefonodon a Kyllene megerősíti a fiókodat. A mentett csevegések utána jelennek meg.</string>
+    <string name="wear_reader_update_phone">Frissítsd a Kyllene-t a telefonodon, hogy itt olvashass csevegéseket.</string>
+    <string name="wear_reader_failed">Nem sikerült beolvasni a beszélgetést.</string>
+    <string name="wear_reader_try_again">Újra</string>
+    <string name="wear_reader_storage_failed">Nem sikerült menteni ezen az órán. A korábban mentett tartalom megmaradt.</string>
+    <string name="wear_reader_empty">Még nincs mentett üzenet.</string>
+    <string name="wear_reader_gap">Ez előtt hiányozhatnak üzenetek</string>
+    <string name="wear_reader_you">Te</string>
+    <string name="wear_reader_hermes">Hermes</string>
+    <string name="wear_reader_full">Teljes ›</string>
+    <string name="wear_reader_open_full">Megnyitás teljesen</string>
+    <string name="wear_reader_partial">%2$d részből %1$d mentve</string>
+    <string name="wear_reader_get_rest">A többi lekérése</string>
+    <string name="wear_reader_getting_rest">A többi lekérése…</string>
+    <string name="wear_reader_message_gone">Ez az üzenet már nincs itt mentve.</string>
+    <string name="wear_reader_choose">Válassz újra egy csevegést vagy botot az olvasáshoz.</string>
+    <string name="wear_saved_here">Ezen az órán mentve</string>
+    <string name="wear_saved_none">Nincs mentve semmi</string>
+    <string name="wear_saved_counting">Számolás…</string>
+    <string name="wear_delete_saved_title">Törlöd, amit ez az óra mentett?</string>
+    <string name="wear_delete_saved_body">A telefonod, a csevegéseid az átjárón és a Live átiratok érintetlenek maradnak.</string>
+    <string name="wear_delete">Törlés</string>
+    <string name="wear_delete_failed">Nem sikerült mindent törölni.</string>
+    <plurals name="wear_saved_chats">
+        <item quantity="one">%1$d csevegés · %2$s</item>
+        <item quantity="other">%1$d csevegés · %2$s</item>
+    </plurals>
+    <plurals name="wear_reader_unreadable">
+        <item quantity="one">%1$d mentett sor nem olvasható. Változatlanul megmarad.</item>
+        <item quantity="other">%1$d mentett sor nem olvasható. Változatlanul megmaradnak.</item>
+    </plurals>
 </resources>

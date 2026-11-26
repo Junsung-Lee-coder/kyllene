@@ -23,6 +23,9 @@ object WearPaths {
     /** Watch → phone: an optional [ChatListRequest] for the recent chats. Phone → watch: a [ChatList]. */
     const val CHATS = "/herald/chats"
 
+    /** Fork: a page of a conversation's stored messages, asked and answered (WatchHistory.kt). */
+    const val HISTORY = "/herald/history"
+
     /** Watch → phone: an optional [PhoneStatusRequest] asking how the phone stands. Phone → watch: a [PhoneStatus]. */
     const val STATUS = "/herald/status"
 
@@ -298,6 +301,13 @@ data class PhoneStatus(
     val profileSync: Boolean = false,
     val scope: WatchScope? = null,
     val accent: WatchAccent? = null,
+    /** Fork: the phone answers [WearPaths.HISTORY]; older phones don't. */
+    val history: Boolean = false,
+    /**
+     * Fork: an opaque key of the gateway's verified account, for the watch's saved pages; null when signed out or not
+     * confirmed yet, when the watch shows none of them.
+     */
+    val account: String? = null,
 )
 
 /*

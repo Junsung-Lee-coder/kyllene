@@ -33,6 +33,7 @@ import dev.hermeskotlin.wearlink.WearCapabilities
 import dev.hermeskotlin.wearlink.WearJson
 import dev.hermeskotlin.wearlink.WearPaths
 import dev.hermeskotlin.wearlink.DefaultCallTarget
+import dev.hermeskotlin.wearlink.HistoryRequest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -135,6 +136,40 @@ class WatchLink(
     /** One of the watch's own lines, in its language, for what the link tells the screen. */
     private fun say(id: Int): String = context.getString(id)
     private val notConnected get() = say(R.string.wear_phone_not_connected_detail)
+
+    /**
+     * Fork: the conversation reader (requirements §9.1, §9.2). Pages are asked for only from its screen; what comes
+     * is saved on the watch under `files/history`, for the verified account the phone names.
+     */
+    val reader: WatchReader by lazy {
+        WatchReader(
+            WatchHistoryStore(java.io.File(context.filesDir, "history")), store, scope, Dispatchers.IO,
+            send = { request -> withContext(main) { sendHistory(request) } },
+            newId = { UUID.randomUUID().toString() },
+        )
+    }
+
+    private suspend fun sendHistory(request: HistoryRequest): String? {
+        if (!profileChecked && !synchronizeProfile()) return say(R.string.wear_phone_unreachable_short)
+        return send(WearPaths.HISTORY, WearJson.encode(request)) { profileChecked }
+    }
+
+    /** Fork: the picked chat or bot as the reader keys it; null when the phone didn't name its scope (an older phone). */
+    fun readerConversation(): WatchHistoryStore.Conversation? {
+        val chat = store.chat.value
+        val scope = chat.scope ?: return null
+        return when {
+            chat.botProfile != null -> WatchHistoryStore.Conversation(scope, null, chat.botProfile)
+            chat.id != null -> WatchHistoryStore.Conversation(scope, chat.id, null)
+            else -> null
+        }
+    }
+
+    /** Fork: a page for the reader, by message or on a channel. */
+    fun onHistory(data: ByteArray, sourceNode: String? = null) {
+        if (sourceNode != null && sourceNode != phoneNode) return
+        scope.launch { reader.accept(data) }
+    }
 
     private val fake = if (BuildConfig.DEBUG) FakePhone(scope) { path, data -> onMessage(path, data) } else null
 
@@ -592,6 +627,7 @@ class WatchLink(
                     }
                 }
                 WearPaths.RING_END -> WearJson.decode<RingEnd>(data)?.let { rings.stop(it.requestId) }
+                WearPaths.HISTORY -> scope.launch { reader.accept(data) }
                 WearPaths.STATUS -> WearJson.decode<PhoneStatus>(data)?.let { status ->
                     if (status.accent?.let(store::setAccent) == true) TileService.getUpdater(context).requestUpdate(AskTileService::class.java)
                     val pending = statusRequest
@@ -610,6 +646,8 @@ class WatchLink(
                         status.failed -> PhoneState.Unreachable
                         else -> PhoneState.Reconnecting
                     }
+                    // Fork: whose saved pages the reader shows; before the waiting request goes on.
+                    reader.onStatus(status.signedIn, status.history, status.account)
                     pending?.second?.complete(valid)
                     if (valid && _chats.value == null) refreshChats()
                     if (valid && profileSync && store.chat.value.scope != null && status.scope != store.chat.value.scope) {

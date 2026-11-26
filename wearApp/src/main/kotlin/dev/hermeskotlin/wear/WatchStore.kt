@@ -21,13 +21,18 @@ data class WatchChatChoice(val id: String?, val title: String?, val model: Strin
 /** Fork: the watch's Talk live is off until it's turned on there; the phone's Phone Live is separate (requirements §3.1). */
 internal const val WATCH_LIVE_BY_DEFAULT = false
 
-class WatchStore(context: Context) {
+class WatchStore(context: Context) : ReaderAccount {
 
     private val prefs = context.getSharedPreferences("herald_watch", Context.MODE_PRIVATE)
 
     var phoneScope: WatchScope?
         get() = prefs.getString(PHONE_SCOPE, null)?.let { WearJson.decode<WatchScope>(it.encodeToByteArray()) }
         set(value) = prefs.edit { putString(PHONE_SCOPE, value?.let { WearJson.encode(it).decodeToString() }) }
+
+    /** Fork: the verified account the phone last named, for the reader's saved pages; null until it names one again. */
+    override var account: String?
+        get() = prefs.getString(READER_ACCOUNT, null)
+        set(value) = prefs.edit(commit = true) { putString(READER_ACCOUNT, value) }
 
     var phoneNode: String?
         get() = prefs.getString(PHONE_NODE, null)
@@ -140,6 +145,7 @@ class WatchStore(context: Context) {
         const val LIVE = "live"
         const val LAST_REPLY = "last_reply"
         const val ASKED_TO_RING = "asked_to_ring"
+        const val READER_ACCOUNT = "reader_account"
         const val MAX_KEPT = 400
     }
 }

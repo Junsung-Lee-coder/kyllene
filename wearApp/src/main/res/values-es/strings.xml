@@ -98,4 +98,44 @@
     <string name="wear_assistant_set">Kyllene responde al botón</string>
     <string name="wear_assistant_refused">Sin configurar. Toca para reintentar</string>
     <string name="wear_assistant_unset">Usar Kyllene como asistente</string>
+
+    <!-- Fork: the conversation reader -->
+    <string name="wear_read_chat">Leer chat</string>
+    <string name="wear_reader_earlier">Anteriores</string>
+    <string name="wear_reader_reading">Leyendo…</string>
+    <string name="wear_reader_up_to_date">Al día</string>
+    <string name="wear_reader_offline">Sin conexión · guardado en este reloj</string>
+    <string name="wear_reader_earlier_offline">Los mensajes anteriores no están guardados en este reloj</string>
+    <string name="wear_reader_start">Inicio de la conversación</string>
+    <string name="wear_reader_locked">Kyllene en tu teléfono está confirmando tu cuenta. Los chats guardados aparecerán después.</string>
+    <string name="wear_reader_update_phone">Actualiza Kyllene en tu teléfono para leer chats aquí.</string>
+    <string name="wear_reader_failed">No se pudo leer la conversación.</string>
+    <string name="wear_reader_try_again">Reintentar</string>
+    <string name="wear_reader_storage_failed">No se pudo guardar en este reloj. Lo guardado antes sigue aquí.</string>
+    <string name="wear_reader_empty">Aún no hay mensajes guardados.</string>
+    <string name="wear_reader_gap">Puede que falten mensajes antes de este</string>
+    <string name="wear_reader_you">Tú</string>
+    <string name="wear_reader_hermes">Hermes</string>
+    <string name="wear_reader_full">Completo ›</string>
+    <string name="wear_reader_open_full">Abrir completo</string>
+    <string name="wear_reader_partial">Guardadas %1$d de %2$d partes</string>
+    <string name="wear_reader_get_rest">Traer el resto</string>
+    <string name="wear_reader_getting_rest">Trayendo el resto…</string>
+    <string name="wear_reader_message_gone">Este mensaje ya no está guardado aquí.</string>
+    <string name="wear_reader_choose">Vuelve a elegir un chat o bot para leerlo.</string>
+    <string name="wear_saved_here">Guardado en este reloj</string>
+    <string name="wear_saved_none">Nada guardado</string>
+    <string name="wear_saved_counting">Contando…</string>
+    <string name="wear_delete_saved_title">¿Eliminar lo que guardó este reloj?</string>
+    <string name="wear_delete_saved_body">Tu teléfono, tus chats en el gateway y las transcripciones de Live no se tocan.</string>
+    <string name="wear_delete">Eliminar</string>
+    <string name="wear_delete_failed">No se pudo eliminar todo lo guardado.</string>
+    <plurals name="wear_saved_chats">
+        <item quantity="one">%1$d chat · %2$s</item>
+        <item quantity="other">%1$d chats · %2$s</item>
+    </plurals>
+    <plurals name="wear_reader_unreadable">
+        <item quantity="one">%1$d línea guardada no se pudo leer. Se conserva tal cual.</item>
+        <item quantity="other">%1$d líneas guardadas no se pudieron leer. Se conservan tal cual.</item>
+    </plurals>
 </resources>

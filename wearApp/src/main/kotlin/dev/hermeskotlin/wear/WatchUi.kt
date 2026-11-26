@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -73,6 +74,8 @@ import androidx.wear.compose.foundation.CurvedTextStyle
 import androidx.wear.compose.foundation.curvedComposable
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
+import androidx.wear.compose.material3.AlertDialog
+import androidx.wear.compose.material3.AlertDialogDefaults
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ButtonDefaults
@@ -96,6 +99,7 @@ import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import dev.hermeskotlin.wearlink.ReplyPhase
 import dev.hermeskotlin.wearlink.WatchAccent
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.sqrt
 
@@ -154,6 +158,7 @@ fun HeraldWatchApp(
     MaterialTheme(colorScheme = watchColors(accent)) {
         AppScaffold(timeText = { EdgeStatus(link, store) }) {
             val nav = rememberSwipeDismissableNavController()
+            var readMessage by rememberSaveable { mutableStateOf<String?>(null) }
             val profileReset by link.profileReset.collectAsState()
             LaunchedEffect(profileReset) {
                 if (profileReset > 0) nav.popBackStack(TALK, inclusive = false)
@@ -169,8 +174,12 @@ fun HeraldWatchApp(
                         onFinishRecording = onFinishRecording,
                         onDismissListeningError = onDismissListeningError,
                         onChats = { nav.navigate(CHATS) },
+                        onRead = { nav.navigate(READER) },
                     )
                 }
+                // Fork: the conversation reader and one message in full (requirements §9.1, §9.2).
+                composable(READER) { ReaderScreen(link = link, store = store, onMessage = { readMessage = it; nav.navigate(MESSAGE) }) }
+                composable(MESSAGE) { readMessage?.let { MessageScreen(link = link, messageId = it) } }
                 composable(CHATS) {
                     ChatsScreen(link = link, store = store, onPicked = { nav.popBackStack() }, onSettings = { nav.navigate(SETTINGS) })
                 }
@@ -246,6 +255,7 @@ private fun TalkScreen(
     onFinishRecording: () -> Unit,
     onDismissListeningError: () -> Unit,
     onChats: () -> Unit,
+    onRead: () -> Unit,
 ) {
     val turn by link.turn.collectAsState()
     val phone by link.phone.collectAsState()
@@ -324,7 +334,21 @@ private fun TalkScreen(
             }
         }
     }
-    ScreenScaffold(scrollState = listState, modifier = Modifier.halo(mood, MaterialTheme.colorScheme.primaryContainer)) { contentPadding -> content(contentPadding) }
+    // Fork: the picked chat or bot can be read here; a new chat has nothing to read yet.
+    val readable = call == null && !mic.recording && (chat.id != null || chat.botProfile != null)
+    if (readable) {
+        ScreenScaffold(
+            scrollState = listState,
+            modifier = Modifier.halo(mood, MaterialTheme.colorScheme.primaryContainer),
+            edgeButton = {
+                EdgeButton(onClick = onRead, buttonSize = EdgeButtonSize.ExtraSmall) {
+                    Text(stringResource(R.string.wear_read_chat), style = geist(14, FontWeight.Medium, MaterialTheme.colorScheme.onPrimary), maxLines = 1)
+                }
+            },
+        ) { contentPadding -> content(contentPadding) }
+    } else {
+        ScreenScaffold(scrollState = listState, modifier = Modifier.halo(mood, MaterialTheme.colorScheme.primaryContainer)) { contentPadding -> content(contentPadding) }
+    }
 }
 
 /**
@@ -827,6 +851,8 @@ private fun SettingsScreen(link: WatchLink, store: WatchStore) {
                 item { VoiceSwitch(stringResource(R.string.wear_talk_live), stringResource(R.string.wear_talk_live_detail), live, store::setLive) }
             }
             item { VoiceSwitch(stringResource(R.string.wear_read_aloud), stringResource(R.string.wear_read_aloud_detail), speak, store::setSpeak) }
+            // Fork: what the reader saved here, and deleting it (requirements §9.2).
+            item { SavedRow(link) }
             // Not a switch: the system's picker decides it, and it can be taken away there too.
             if (canBeAssistant && assistantRequest != null) {
                 item {
@@ -917,3 +943,200 @@ internal fun activityLine(phase: ReplyPhase, activity: String?): WatchLine = act
 private const val TALK = "talk"
 private const val CHATS = "chats"
 private const val SETTINGS = "settings"
+private const val READER = "reader"
+private const val MESSAGE = "message"
+
+/** Fork: the reader's saved copy, in settings: how much, and deleting it after asking. */
+@Composable
+private fun SavedRow(link: WatchLink) {
+    val reader = link.reader
+    val saved by reader.saved.collectAsState()
+    val state by reader.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    var asking by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { reader.countSaved() }
+    val context = LocalContext.current
+    val summary = when (val now = saved) {
+        null -> stringResource(R.string.wear_saved_counting)
+        else -> if (now.first == 0 && now.second == 0L) stringResource(R.string.wear_saved_none)
+            else context.resources.getQuantityString(R.plurals.wear_saved_chats, now.first, now.first, android.text.format.Formatter.formatShortFileSize(context, now.second))
+    }
+    Button(
+        onClick = { asking = true },
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Surface2, contentColor = Text1, secondaryContentColor = Muted),
+        label = { Text(stringResource(R.string.wear_saved_here), style = geist(14, FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        secondaryLabel = {
+            Text(
+                if (state.storageError == WatchReader.DELETE_FAILED) stringResource(R.string.wear_delete_failed) else summary,
+                style = geist(12, color = if (state.storageError == WatchReader.DELETE_FAILED) Danger else Text2),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+    )
+    val deleteLabel = stringResource(R.string.wear_delete)
+    val cancelLabel = stringResource(R.string.wear_cancel)
+    AlertDialog(
+        visible = asking,
+        onDismissRequest = { asking = false },
+        title = { Text(stringResource(R.string.wear_delete_saved_title), textAlign = TextAlign.Center) },
+        text = { Text(stringResource(R.string.wear_delete_saved_body), style = geist(13, color = Muted), textAlign = TextAlign.Center) },
+        confirmButton = {
+            AlertDialogDefaults.ConfirmButton(
+                onClick = {
+                    asking = false
+                    scope.launch { reader.deleteAll() }
+                },
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = Danger, contentColor = Color.Black),
+            ) { Icon(painterResource(R.drawable.ic_delete), contentDescription = deleteLabel, tint = Color.Black) }
+        },
+        dismissButton = {
+            AlertDialogDefaults.DismissButton(
+                onClick = { asking = false },
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = Surface2, contentColor = Text1),
+            ) { Icon(painterResource(R.drawable.ic_close), contentDescription = cancelLabel, tint = Text1) }
+        },
+    )
+}
+
+/**
+ * Fork: the picked chat's or bot's conversation as the watch saved it, oldest first, and Earlier for the page before.
+ * Each card is one message's start; a tap opens it whole.
+ */
+@Composable
+private fun ReaderScreen(link: WatchLink, store: WatchStore, onMessage: (String) -> Unit) {
+    val chat by store.chat.collectAsState()
+    val reader = link.reader
+    val state by reader.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    val listState = rememberTransformingLazyColumnState()
+    val conversation = remember(chat.id, chat.botProfile, chat.scope) { link.readerConversation() }
+    LaunchedEffect(conversation) { conversation?.let { reader.open(it, chat.title) } }
+    val shown = state.takeIf { it.conversation == conversation && conversation != null }
+    // Opens at the newest; reading Earlier keeps the place.
+    val newest = shown?.messages?.lastOrNull()?.id
+    LaunchedEffect(newest) { if (newest != null && shown?.status != ReaderStatus.ReadingOlder) listState.scrollToItem(listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1) }
+    ScreenScaffold(scrollState = listState, modifier = Modifier.halo(OrbMood.Idle, MaterialTheme.colorScheme.primaryContainer)) { contentPadding ->
+        TransformingLazyColumn(state = listState, contentPadding = contentPadding, modifier = Modifier.fillMaxSize()) {
+            item(key = "title") {
+                Text(chat.title ?: shown?.title ?: stringResource(R.string.wear_chat), modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 2.dp),
+                    style = geist(15, FontWeight.SemiBold), textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            if (conversation == null || shown == null) {
+                item(key = "choose") { ReaderLine(stringResource(R.string.wear_reader_choose), Muted) }
+                return@TransformingLazyColumn
+            }
+            if (shown.locked) {
+                item(key = "locked") { ReaderLine(stringResource(if (shown.signedIn) R.string.wear_reader_locked else R.string.wear_phone_signed_out), Amber) }
+                return@TransformingLazyColumn
+            }
+            val offline = shown.status == ReaderStatus.Offline
+            item(key = "earlier") {
+                when {
+                    shown.olderOffset != null -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Button(
+                            onClick = { scope.launch { reader.older() } },
+                            enabled = !offline && shown.status != ReaderStatus.ReadingOlder,
+                            colors = ButtonDefaults.buttonColors(containerColor = Surface2, contentColor = Text1),
+                            label = { Text(stringResource(if (shown.status == ReaderStatus.ReadingOlder) R.string.wear_reader_reading else R.string.wear_reader_earlier), style = geist(13, FontWeight.Medium), maxLines = 1) },
+                        )
+                        if (offline) ReaderLine(stringResource(R.string.wear_reader_earlier_offline), Muted)
+                    }
+                    shown.olderSaved -> ReaderLine(stringResource(R.string.wear_reader_start), Muted)
+                    else -> Unit
+                }
+            }
+            item(key = "status") {
+                val (line, color) = when (shown.status) {
+                    ReaderStatus.Reading, ReaderStatus.ReadingOlder, ReaderStatus.Idle -> stringResource(R.string.wear_reader_reading) to Muted
+                    ReaderStatus.UpToDate -> stringResource(R.string.wear_reader_up_to_date) to Muted
+                    ReaderStatus.Offline -> stringResource(R.string.wear_reader_offline) to Amber
+                    ReaderStatus.Failed -> (shown.error ?: stringResource(R.string.wear_reader_failed)) to Danger
+                    ReaderStatus.Locked -> stringResource(R.string.wear_reader_locked) to Amber
+                    ReaderStatus.UpdatePhone -> stringResource(R.string.wear_reader_update_phone) to Amber
+                }
+                Box(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = stringResource(R.string.wear_reader_try_again)) { scope.launch { reader.refresh() } }) {
+                    ReaderLine(line, color)
+                }
+            }
+            if (shown.storageError != null && shown.storageError != WatchReader.DELETE_FAILED) item(key = "storage") { ReaderLine(stringResource(R.string.wear_reader_storage_failed), Danger) }
+            if (shown.unreadable > 0) item(key = "unreadable") {
+                ReaderLine(LocalContext.current.resources.getQuantityString(R.plurals.wear_reader_unreadable, shown.unreadable, shown.unreadable), Amber)
+            }
+            if (shown.messages.isEmpty() && shown.status != ReaderStatus.Reading) item(key = "empty") { ReaderLine(stringResource(R.string.wear_reader_empty), Muted) }
+            shown.messages.forEach { message ->
+                if (message.gapBefore) item(key = "gap:${message.id}") { ReaderLine(stringResource(R.string.wear_reader_gap), Muted) }
+                item(key = message.id) { MessageCard(message) { onMessage(message.id) } }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderLine(text: String, color: Color) {
+    Text(text, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 3.dp), style = geist(12, color = color), textAlign = TextAlign.Center)
+}
+
+/** Who said it, and the start of it; "Full ›" when there's more than shows. */
+@Composable
+private fun MessageCard(message: dev.hermeskotlin.wearlink.SavedHistoryMessage, onClick: () -> Unit) {
+    var clipped by remember(message.id, message.text.length) { mutableStateOf(false) }
+    val you = message.role == "user"
+    val who = stringResource(if (you) R.string.wear_reader_you else R.string.wear_reader_hermes)
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp).clip(RoundedCornerShape(18.dp)).background(Surface2)
+            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.wear_reader_open_full), onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Text(who, style = geist(12, FontWeight.Medium, if (you) Muted else MaterialTheme.colorScheme.primary))
+        Text(message.text, style = geist(14, color = Text1, line = 19), maxLines = 3, overflow = TextOverflow.Ellipsis, onTextLayout = { clipped = it.hasVisualOverflow })
+        if (clipped || !message.complete) {
+            Text(stringResource(R.string.wear_reader_full), modifier = Modifier.fillMaxWidth(), style = geist(12, color = Muted), textAlign = TextAlign.End)
+        }
+    }
+}
+
+/** Fork: one saved message, all of it; a long one keeps fetching its rest while it's open. */
+@Composable
+private fun MessageScreen(link: WatchLink, messageId: String) {
+    val reader = link.reader
+    val state by reader.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    val message = state.messages.firstOrNull { it.id == messageId }
+    val listState = rememberTransformingLazyColumnState()
+    LaunchedEffect(messageId, message?.complete) { if (message != null && !message.complete) reader.rest(messageId) }
+    ScreenScaffold(scrollState = listState, modifier = Modifier.halo(OrbMood.Idle, MaterialTheme.colorScheme.primaryContainer)) { contentPadding ->
+        TransformingLazyColumn(state = listState, contentPadding = contentPadding, modifier = Modifier.fillMaxSize()) {
+            if (message == null) {
+                item { ReaderLine(stringResource(R.string.wear_reader_message_gone), Muted) }
+                return@TransformingLazyColumn
+            }
+            item(key = "who") {
+                val you = message.role == "user"
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    Text(stringResource(if (you) R.string.wear_reader_you else R.string.wear_reader_hermes), style = geist(12, FontWeight.Medium, if (you) Muted else MaterialTheme.colorScheme.primary))
+                    ago(message.at)?.let { Text("  " + it.text(), style = geist(12, color = Muted)) }
+                }
+            }
+            readerChunks(message.text).forEachIndexed { index, chunk ->
+                item(key = "chunk:$index") {
+                    Text(chunk, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), style = geist(15, color = Text1, line = 21))
+                }
+            }
+            if (!message.complete) item(key = "rest") {
+                Column(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    ReaderLine(stringResource(R.string.wear_reader_partial, message.have, message.parts), Amber)
+                    val fetching = state.restFor == messageId && state.restError == null && state.status != ReaderStatus.Offline
+                    if (fetching) ReaderLine(stringResource(R.string.wear_reader_getting_rest), Muted)
+                    else Button(
+                        onClick = { scope.launch { reader.rest(messageId) } },
+                        colors = ButtonDefaults.buttonColors(containerColor = Surface2, contentColor = Text1),
+                        label = { Text(stringResource(R.string.wear_reader_get_rest), style = geist(13, FontWeight.Medium), maxLines = 1) },
+                    )
+                    state.restError?.takeIf { it.isNotBlank() && state.restFor == messageId }?.let { ReaderLine(it, Danger) }
+                }
+            }
+        }
+    }
+}

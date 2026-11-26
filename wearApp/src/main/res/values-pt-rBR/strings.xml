@@ -98,4 +98,44 @@
     <string name="wear_assistant_set">O Kyllene atende o botão</string>
     <string name="wear_assistant_refused">Não definido. Toque para tentar de novo</string>
     <string name="wear_assistant_unset">Definir o Kyllene como assistente</string>
+
+    <!-- Fork: the conversation reader -->
+    <string name="wear_read_chat">Ler chat</string>
+    <string name="wear_reader_earlier">Anteriores</string>
+    <string name="wear_reader_reading">Lendo…</string>
+    <string name="wear_reader_up_to_date">Atualizado</string>
+    <string name="wear_reader_offline">Offline · salvo neste relógio</string>
+    <string name="wear_reader_earlier_offline">As mensagens anteriores não estão salvas neste relógio</string>
+    <string name="wear_reader_start">Início da conversa</string>
+    <string name="wear_reader_locked">O Kyllene no seu celular está confirmando sua conta. Os chats salvos aparecem depois.</string>
+    <string name="wear_reader_update_phone">Atualize o Kyllene no seu celular para ler chats aqui.</string>
+    <string name="wear_reader_failed">Não foi possível ler a conversa.</string>
+    <string name="wear_reader_try_again">Tentar de novo</string>
+    <string name="wear_reader_storage_failed">Não foi possível salvar neste relógio. O que estava salvo continua aqui.</string>
+    <string name="wear_reader_empty">Nenhuma mensagem salva ainda.</string>
+    <string name="wear_reader_gap">Pode haver mensagens faltando antes desta</string>
+    <string name="wear_reader_you">Você</string>
+    <string name="wear_reader_hermes">Hermes</string>
+    <string name="wear_reader_full">Completa ›</string>
+    <string name="wear_reader_open_full">Abrir completa</string>
+    <string name="wear_reader_partial">%1$d de %2$d partes salvas</string>
+    <string name="wear_reader_get_rest">Buscar o resto</string>
+    <string name="wear_reader_getting_rest">Buscando o resto…</string>
+    <string name="wear_reader_message_gone">Esta mensagem não está mais salva aqui.</string>
+    <string name="wear_reader_choose">Escolha um chat ou bot de novo para lê-lo.</string>
+    <string name="wear_saved_here">Salvo neste relógio</string>
+    <string name="wear_saved_none">Nada salvo</string>
+    <string name="wear_saved_counting">Contando…</string>
+    <string name="wear_delete_saved_title">Apagar o que este relógio salvou?</string>
+    <string name="wear_delete_saved_body">Seu celular, seus chats no gateway e as transcrições do Live não são afetados.</string>
+    <string name="wear_delete">Apagar</string>
+    <string name="wear_delete_failed">Não foi possível apagar tudo o que foi salvo.</string>
+    <plurals name="wear_saved_chats">
+        <item quantity="one">%1$d chat · %2$s</item>
+        <item quantity="other">%1$d chats · %2$s</item>
+    </plurals>
+    <plurals name="wear_reader_unreadable">
+        <item quantity="one">%1$d linha salva não pôde ser lida. Ela é mantida como estava.</item>
+        <item quantity="other">%1$d linhas salvas não puderam ser lidas. Elas são mantidas como estavam.</item>
+    </plurals>
 </resources>

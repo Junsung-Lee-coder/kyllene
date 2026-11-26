@@ -32,6 +32,8 @@ import dev.hermeskotlin.wearlink.ChatList
 import dev.hermeskotlin.wearlink.PhoneStatus
 import dev.hermeskotlin.wearlink.ReplyPhase
 import dev.hermeskotlin.wearlink.ReplySpeech
+import dev.hermeskotlin.wearlink.HISTORY_MESSAGE_BYTES
+import dev.hermeskotlin.wearlink.HistoryRequest
 import dev.hermeskotlin.wearlink.ReplyUpdate
 import dev.hermeskotlin.wearlink.WatchScope
 import dev.hermeskotlin.wearlink.WatchAccent
@@ -110,6 +112,28 @@ class WatchRelay(
     /** Fork: text sent on the phone silences a watch ask's reply voice (requirements §6.1); null voices every one. */
     private val speechGate: SpeechGate? = null,
 ) {
+    /** Fork: a conversation's stored messages for the watch's reader, read only when it asks (requirements §9.1). */
+    private val historyReader = WatchHistoryReader(gateways, auth, profiles, connection, sessions, bots)
+
+    /**
+     * Fork: answers the watch [node]'s [request] for a page (or a part of one message) of stored messages. A large
+     * answer goes on a channel. Holds the connection while it reads, as a chat list does.
+     */
+    fun history(node: String, request: HistoryRequest) {
+        lists.incrementAndFetch()
+        refreshBusy()
+        scope.launch {
+            try {
+                val bytes = WearJson.encode(historyReader.read(request))
+                if (bytes.size > HISTORY_MESSAGE_BYTES) outbox.streamSafely(node, WearPaths.HISTORY, bytes)
+                else outbox.sendSafely(node, WearPaths.HISTORY, bytes)
+            } finally {
+                lists.updateAndFetch { (it - 1).coerceAtLeast(0) }
+                refreshBusy()
+            }
+        }
+    }
+
     /** Fork: stops listening for text that silences the last ask's voice; replaced by the next ask. */
     private val watchSpeechWatch = AtomicReference<(() -> Unit)?>(null)
 
@@ -300,7 +324,9 @@ class WatchRelay(
         return PhoneStatus(signedIn, signedIn && reachable, failed = signedIn && state is ConnectionState.Failed,
             liveVoice = live, botChats = true, botProfile = botProfile, defaultCalls = true, profileSync = true,
             activeScope = gateway?.let { WatchScope(it.value, profiles.get(it)) },
-            scope = gateway?.let { WatchScope(it.value, profile) }) to gateway
+            scope = gateway?.let { WatchScope(it.value, profile) },
+            // Fork: the watch's reader, and whose its saved pages are.
+            history = true, account = gateway?.let { historyReader.accountKey(it) }) to gateway
     }
 
     /** Whether [gateway]'s live voice was asked lately: the watch asks how the phone stands often, the gateway every few minutes. */

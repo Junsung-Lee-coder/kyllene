@@ -251,8 +251,49 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      `ui/assistant/AssistantSpeechGateTest.kt`. The notification receiver itself has no test here (the app module has
      none); it calls `typed`, which `SpeechGateTest` covers.
 
+8. **The watch reads the picked chat or bot, and keeps what it read.**
+   - Talk on the watch has a Read chat button along the bottom edge once a chat or bot is picked. It opens the
+     conversation as cards (who said it, its first lines, "Full ›" when there's more); a card opens the whole message.
+     Earlier asks for the page before. Nothing is typed or read aloud there, and picking a chat works as before.
+   - The phone reads a page only when the watch asks: 20 stored rows back from the newest (hidden and tool rows count
+     toward the offset, as the gateway's `order=latest` does, and aren't shown), and a bot's canonical stored chat,
+     never a new one. Every message goes whole: text over 100,000 characters goes in parts, the first with its page and
+     the rest asked for by the message screen; a page over 80 KB goes on a channel. Nothing is cut short.
+   - The watch keeps every page it got under `files/history`, across restarts, with no limit on count, age or size,
+     and shows it offline. Pages are merged by message id, so new turns that shift the offsets don't repeat or reorder
+     anything; where pages don't meet, the cards say messages may be missing there until Earlier fills them. A 404,
+     the phone signing out, or a gateway removed leaves the copy as it is.
+   - Whose copy: each page carries an opaque key of the gateway's verified account (a hash of the gateway and
+     `SessionBindings.owner`); the phone's status names it too. The watch shows only the copy of the account the phone
+     last named, offline too. A phone not signed in, or whose account isn't confirmed yet, gets no content read, and
+     the watch shows nothing saved until the phone names an account again; another account hides the last one's copy
+     for good unless the phone names it again. A page that doesn't answer a request made for the same account and
+     conversation since the last switch (a late reply, another account's) is kept in `quarantine/`, never shown.
+   - Paths are the account key (checked to be one) and a SHA-256 of the gateway, profile and chat or bot; no id or
+     name is ever a path. Writes go through a temporary file. A line or meta file that doesn't read is kept as it
+     was, and said; a write that fails is said, and the copy before stays.
+   - Settings on the watch: Saved on this watch (how many chats, how much space) deletes, after asking, everything
+     the reader saved there, every account's. The phone, the gateway's chats, Live transcripts and the rest of the
+     watch app aren't touched; requests still on their way when it's deleted are dropped when they come back.
+   - Protocol: `/herald/history` with `HistoryRequest` and `HistoryPage` (`shared/wearlink/.../WatchHistory.kt`), and
+     `PhoneStatus.history` and `account`, left out when unset. An older phone doesn't set `history`, and the watch
+     asks it nothing; an older watch ignores the new fields and never asks. The request and page shapes, raw-row
+     offsets and the bot's stored chat follow upstream Kyllene PR #370 (StavenCross, MIT); the account key, parts and
+     saved copy are this fork's.
+   - Code: `core/wear/WatchHistoryReader.kt` and `WatchRelay.history` on the phone, `WearBridgeService`'s route;
+     `wearApp/.../WatchHistoryStore.kt` (the files), `WatchReader.kt` (requests, identity, delete), `WatchLink`
+     (status, sending, pages), `WatchListenerService` (the channel), `WatchStore.account`, and the reader, message and
+     settings screens in `WatchUi.kt`. Strings in every language.
+   - Tests: `core/wear/WatchHistoryReaderTest.kt` (the reader and relay on the fake gateway: paging, hidden rows, a
+     long message in parts after new turns, a pending account, 404, another profile or gateway, a bot, message or
+     channel, the status), `wearlink/WatchHistoryWireTest.kt` (parts, older peers), `wearApp/.../WatchHistoryStoreTest.kt`
+     (60 chats across a restart, shifted offsets, gaps, unreadable lines and meta, a failed write, paths, parts,
+     delete) and `wearApp/.../WatchReaderTest.kt` (restart offline, a pending account, an account switch and late
+     reply, another account's page, 404, sign-out, delete with a request on its way, parts, a failed save, no answer).
+
 The fork adds two switches to Settings › Voice and the Ready state to the voice panel; it doesn't otherwise change
-the settings screens or layout. The watch app changes only as described above.
+the settings screens or layout. The watch app changes only as described above, the reader and its settings row
+included.
 
 ## Moving to a newer upstream release
 
@@ -303,6 +344,9 @@ For each conflict or failing test:
 - **Speech after text.** Keep `textSent()` (or `typed`) in every path upstream adds for sending typed text, the
   ticket where `converseOnce` sends and `askAloud` answers, the `mayRead()` checks before a reply is voiced, the
   ticket and `voicing` check in `WatchRelay.answer`, and the `hangUp` hooks where a `LiveConversation` runs.
+- **Watch reader.** Keep `/herald/history` and the `PhoneStatus` fields optional. If upstream adds its own watch
+  reader (as PR #370 proposed), compare before dropping the fork's: keep the account key on every page and in the
+  status, whole messages in parts, and the saved copy's no-eviction, quarantine and delete rules.
 - **Talk.** If upstream changes `startChat`, `hear` or `converseOnce`, keep the `mode` branch before the live check,
   `awaitTalk()` at the top of `hear`'s loop, and `MANUAL_TALK` for Talk's recordings. If it adds a `VoicePhase`, give
   it a place in `voicePress` and the panel's label. If upstream adds its own Live switch, use theirs and drop

@@ -111,4 +111,47 @@
     <string name="wear_assistant_set">Kyllene answers the button</string>
     <string name="wear_assistant_refused">Not set. Tap to try again</string>
     <string name="wear_assistant_unset">Set Kyllene as assistant</string>
+
+    <!-- Fork: the conversation reader -->
+    <string name="wear_read_chat">Read chat</string>
+    <string name="wear_reader_earlier">Earlier</string>
+    <string name="wear_reader_reading">Reading…</string>
+    <string name="wear_reader_up_to_date">Up to date</string>
+    <!-- Status line: no phone, the saved copy shows -->
+    <string name="wear_reader_offline">Offline · saved on this watch</string>
+    <string name="wear_reader_earlier_offline">Earlier messages aren’t saved on this watch</string>
+    <string name="wear_reader_start">Start of the conversation</string>
+    <string name="wear_reader_locked">Kyllene on your phone is confirming your account. Saved chats show once it has.</string>
+    <string name="wear_reader_update_phone">Update Kyllene on your phone to read chats here.</string>
+    <string name="wear_reader_failed">Couldn’t read the conversation.</string>
+    <string name="wear_reader_try_again">Try again</string>
+    <string name="wear_reader_storage_failed">Couldn’t save on this watch. What was saved before is still here.</string>
+    <string name="wear_reader_empty">No messages saved yet.</string>
+    <string name="wear_reader_gap">Messages before this may be missing</string>
+    <string name="wear_reader_you">You</string>
+    <string name="wear_reader_hermes">Hermes</string>
+    <string name="wear_reader_full">Full ›</string>
+    <string name="wear_reader_open_full">Open in full</string>
+    <!-- %1$d: parts saved; %2$d: parts in all -->
+    <string name="wear_reader_partial">Saved %1$d of %2$d parts</string>
+    <string name="wear_reader_get_rest">Get the rest</string>
+    <string name="wear_reader_getting_rest">Getting the rest…</string>
+    <string name="wear_reader_message_gone">This message isn’t saved here any more.</string>
+    <string name="wear_reader_choose">Pick a chat or bot again to read it.</string>
+    <string name="wear_saved_here">Saved on this watch</string>
+    <string name="wear_saved_none">Nothing saved</string>
+    <string name="wear_saved_counting">Counting…</string>
+    <string name="wear_delete_saved_title">Delete what this watch saved?</string>
+    <string name="wear_delete_saved_body">Your phone, your chats on the gateway and Live transcripts aren’t touched.</string>
+    <string name="wear_delete">Delete</string>
+    <string name="wear_delete_failed">Couldn’t delete everything saved here.</string>
+    <!-- %1$d: chats saved; %2$s: their size, as "3.4 MB" -->
+    <plurals name="wear_saved_chats">
+        <item quantity="one">%1$d chat · %2$s</item>
+        <item quantity="other">%1$d chats · %2$s</item>
+    </plurals>
+    <plurals name="wear_reader_unreadable">
+        <item quantity="one">%1$d saved line couldn’t be read. It’s kept as it was.</item>
+        <item quantity="other">%1$d saved lines couldn’t be read. They’re kept as they were.</item>
+    </plurals>
 </resources>

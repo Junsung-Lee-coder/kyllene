@@ -26,7 +26,9 @@ class WatchListenerService : WearableListenerService() {
     }
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {
-        if (WearPaths.parseSpeech(channel.path) == null) return
+        // Fork: a large page for the reader comes on a channel too.
+        val history = channel.path == WearPaths.HISTORY
+        if (!history && WearPaths.parseSpeech(channel.path) == null) return
         val channels = Wearable.getChannelClient(this)
         app.scope.launch {
             val bytes = try {
@@ -37,7 +39,7 @@ class WatchListenerService : WearableListenerService() {
             } finally {
                 runCatching { channels.close(channel) }
             }
-            bytes?.let { app.link.onSpeech(channel.path, it, channel.nodeId) }
+            bytes?.let { if (history) app.link.onHistory(it, channel.nodeId) else app.link.onSpeech(channel.path, it, channel.nodeId) }
         }
     }
 }

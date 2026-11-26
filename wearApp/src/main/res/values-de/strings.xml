@@ -98,4 +98,44 @@
     <string name="wear_assistant_set">Kyllene antwortet auf die Taste</string>
     <string name="wear_assistant_refused">Nicht gesetzt. Tippe für einen neuen Versuch</string>
     <string name="wear_assistant_unset">Kyllene als Assistent festlegen</string>
+
+    <!-- Fork: the conversation reader -->
+    <string name="wear_read_chat">Chat lesen</string>
+    <string name="wear_reader_earlier">Früher</string>
+    <string name="wear_reader_reading">Wird gelesen…</string>
+    <string name="wear_reader_up_to_date">Aktuell</string>
+    <string name="wear_reader_offline">Offline · auf dieser Uhr gespeichert</string>
+    <string name="wear_reader_earlier_offline">Frühere Nachrichten sind auf dieser Uhr nicht gespeichert</string>
+    <string name="wear_reader_start">Anfang der Unterhaltung</string>
+    <string name="wear_reader_locked">Kyllene auf deinem Telefon bestätigt dein Konto. Gespeicherte Chats erscheinen danach.</string>
+    <string name="wear_reader_update_phone">Aktualisiere Kyllene auf deinem Telefon, um Chats hier zu lesen.</string>
+    <string name="wear_reader_failed">Die Unterhaltung konnte nicht gelesen werden.</string>
+    <string name="wear_reader_try_again">Erneut versuchen</string>
+    <string name="wear_reader_storage_failed">Speichern auf dieser Uhr fehlgeschlagen. Was zuvor gespeichert war, ist noch da.</string>
+    <string name="wear_reader_empty">Noch keine Nachrichten gespeichert.</string>
+    <string name="wear_reader_gap">Davor fehlen eventuell Nachrichten</string>
+    <string name="wear_reader_you">Du</string>
+    <string name="wear_reader_hermes">Hermes</string>
+    <string name="wear_reader_full">Ganz ›</string>
+    <string name="wear_reader_open_full">Ganz öffnen</string>
+    <string name="wear_reader_partial">%1$d von %2$d Teilen gespeichert</string>
+    <string name="wear_reader_get_rest">Rest laden</string>
+    <string name="wear_reader_getting_rest">Rest wird geladen…</string>
+    <string name="wear_reader_message_gone">Diese Nachricht ist hier nicht mehr gespeichert.</string>
+    <string name="wear_reader_choose">Wähle einen Chat oder Bot erneut, um ihn zu lesen.</string>
+    <string name="wear_saved_here">Auf dieser Uhr gespeichert</string>
+    <string name="wear_saved_none">Nichts gespeichert</string>
+    <string name="wear_saved_counting">Wird gezählt…</string>
+    <string name="wear_delete_saved_title">Löschen, was diese Uhr gespeichert hat?</string>
+    <string name="wear_delete_saved_body">Dein Telefon, deine Chats auf dem Gateway und Live-Transkripte bleiben unberührt.</string>
+    <string name="wear_delete">Löschen</string>
+    <string name="wear_delete_failed">Nicht alles Gespeicherte konnte gelöscht werden.</string>
+    <plurals name="wear_saved_chats">
+        <item quantity="one">%1$d Chat · %2$s</item>
+        <item quantity="other">%1$d Chats · %2$s</item>
+    </plurals>
+    <plurals name="wear_reader_unreadable">
+        <item quantity="one">%1$d gespeicherte Zeile ist nicht lesbar. Sie bleibt unverändert erhalten.</item>
+        <item quantity="other">%1$d gespeicherte Zeilen sind nicht lesbar. Sie bleiben unverändert erhalten.</item>
+    </plurals>
 </resources>
