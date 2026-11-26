@@ -1,9 +1,12 @@
 package dev.hermeskotlin.core.voice
 
 import android.content.Context
+import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -45,6 +48,26 @@ class AndroidLiveCall(context: Context) : LiveCall {
     private var audioSource: org.webrtc.AudioSource? = null
     private var previousMode = AudioManager.MODE_NORMAL
     private var routed = false
+
+    /**
+     * Fork: the call went to earphones. If they go away it hangs up, silent, rather than going on from the phone (a
+     * lost headset stops speech); the call's events end, as for a call that dropped.
+     */
+    private var onHeadset = false
+    private val headsetWatch = object : AudioDeviceCallback() {
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+            if (onHeadset && !closed && !headsetIn()) {
+                runCatching { audioTrack?.setEnabled(false) }
+                runCatching { adm?.setSpeakerMute(true) }
+                close()
+            }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun headsetIn(): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        audioManager.availableCommunicationDevices.any { it.type in HEADSETS }
+    } else audioManager.isWiredHeadsetOn || audioManager.isBluetoothScoOn
 
     @Volatile private var closed = false
     @Volatile private var micLevel = 0f
@@ -186,15 +209,20 @@ class AndroidLiveCall(context: Context) : LiveCall {
             val devices = audioManager.availableCommunicationDevices
             val headset = devices.firstOrNull { it.type in HEADSETS }
             (headset ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER })?.let(audioManager::setCommunicationDevice)
+            onHeadset = headset != null
         } else {
             audioManager.isSpeakerphoneOn = !audioManager.isWiredHeadsetOn && !audioManager.isBluetoothScoOn
+            onHeadset = !audioManager.isSpeakerphoneOn
         }
+        if (onHeadset) runCatching { audioManager.registerAudioDeviceCallback(headsetWatch, Handler(Looper.getMainLooper())) }
     }
 
     @Suppress("DEPRECATION")
     private fun unrouteAudio() {
         if (!routed) return
         routed = false
+        if (onHeadset) runCatching { audioManager.unregisterAudioDeviceCallback(headsetWatch) }
+        onHeadset = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) audioManager.clearCommunicationDevice()
         else audioManager.isSpeakerphoneOn = false
         audioManager.mode = previousMode

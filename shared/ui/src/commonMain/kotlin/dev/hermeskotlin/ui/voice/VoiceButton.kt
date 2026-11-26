@@ -1,0 +1,102 @@
+package dev.hermeskotlin.ui.voice
+
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+
+/** Fork: the headset buttons that start or end voice. Play, Pause, Play/Pause (and the hook) and Stop are all one. */
+enum class VoiceKey { Play, Pause, PlayPause, Stop }
+
+/** Fork: what one press of a [VoiceKey] does. */
+enum class VoicePress {
+    /** No voice on: talk, as the chat's Voice button does. */
+    Start,
+    /** The chat is listening and has heard you: send what you said now, as Send now does. */
+    Send,
+    /** Any other voice on (a live call, a reply, the agent at work): end it, as End does. */
+    End,
+    /** Not the chat's to take: the button goes where it would have gone. */
+    None,
+}
+
+/** Fork: what a press does to [chat], where [canStart] says whether a chat on screen could start voice. */
+internal fun voicePress(chat: VoiceChatState, canStart: Boolean): VoicePress = when {
+    chat.phase == VoicePhase.Off -> if (canStart) VoicePress.Start else VoicePress.None
+    canSendNow(chat) -> VoicePress.Send
+    else -> VoicePress.End
+}
+
+/**
+ * Fork customization: the earphones' play/pause/stop button as one toggle for the chat's voice (requirements §4).
+ *
+ * - With no voice on, a press starts it, as the chat's Voice button does.
+ * - A live call ends.
+ * - A chained chat sends what it heard once it's listening and has heard you; otherwise it ends.
+ *
+ * A press is one press, however it's told: its down and up, repeats while held, or the same event from both the
+ * activity and the media session. Each is known by its device and the time it went down, so the next press, which
+ * went down later, is always its own. Read aloud keeps the button while it reads and no voice is on, and with no chat
+ * on screen the button goes where it would have gone.
+ *
+ * The chat screen binds itself while it shows ([bind]). The platform's key and media-session events come in through
+ * [press]. Main thread only.
+ */
+object VoiceButton {
+    private class Target(val owner: Any, val voice: VoiceController, val start: () -> Unit)
+
+    private val targets = MutableStateFlow<List<Target>>(emptyList())
+
+    /** Presses acted on, by device and the time they went down; their ups and repeats are theirs too. */
+    private val acted = ArrayDeque<Pair<Int, Long>>()
+
+    /** [voice] is the chat's on screen; [start] starts it as the chat's Voice button does. */
+    fun bind(owner: Any, voice: VoiceController, start: () -> Unit) {
+        targets.value = targets.value.filterNot { it.owner === owner } + Target(owner, voice, start)
+    }
+
+    fun unbind(owner: Any) {
+        targets.value = targets.value.filterNot { it.owner === owner }
+    }
+
+    /** Whether the bound chat has voice on: the media session holds the button meanwhile, the app out of sight too. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val voiceOn: Flow<Boolean> = targets.flatMapLatest { all ->
+        all.lastOrNull()?.voice?.chat?.map { it.phase != VoicePhase.Off } ?: flowOf(false)
+    }
+
+    /**
+     * One [key] event: [down] or up, [repeat] while held, [downTime] when its press went down, from [device]. True
+     * when it's the chat's (taken), false to let it go on where it would have gone.
+     */
+    fun press(key: VoiceKey, down: Boolean, repeat: Int, downTime: Long, device: Int): Boolean {
+        val target = targets.value.lastOrNull() ?: return false
+        val id = device to downTime
+        // A press's up and its repeats follow its down: taken if that was.
+        if (!down || repeat > 0 || id in acted) return id in acted
+        val chat = target.voice.chat.value
+        // Read aloud has the button while it reads and nothing else is on.
+        if (chat.phase == VoicePhase.Off && target.voice.reading.value.key != null) return false
+        val action = voicePress(chat, canStart = true)
+        if (action == VoicePress.None) return false
+        acted.addLast(id)
+        while (acted.size > MAX_REMEMBERED) acted.removeFirst()
+        when (action) {
+            VoicePress.Start -> target.start()
+            VoicePress.Send -> target.voice.sendNow()
+            VoicePress.End -> target.voice.stopChat()
+            VoicePress.None -> Unit
+        }
+        return true
+    }
+
+    /** For tests: forgets every binding and press. */
+    internal fun reset() {
+        targets.value = emptyList()
+        acted.clear()
+    }
+
+    private const val MAX_REMEMBERED = 32
+}

@@ -333,8 +333,15 @@ class VoiceController(
         // Only talk-over needs call audio, for its echo cancelling. The route is settled before the first listen or
         // the opener, since changing it under a recording or a voice clips them. A gateway that can't say has
         // talk-over on, so it gets call audio.
-        val closeAudio: () -> Unit = if (settings.await().enabled) player.chainedChatAudio() else ({})
+        // Fork: every chained chat asks, talk-over on or not, so earphones with a microphone take it as a live call
+        // takes them, and a pair that goes away ends it rather than moving it to the speaker (HeadsetAudio).
+        val chat = chatJob
+        val closeAudio: () -> Unit = player.chainedChatAudio(settings.await().enabled) { headsetLost(chat) }
         chainedAudio = closeAudio
+        if (player.headsetMicUnavailable()) {
+            val why = runCatching { getString(Res.string.voice_error_headset_mic_unavailable) }.getOrNull() ?: HEADSET_MIC_UNAVAILABLE
+            _chat.update { it.copy(error = why) }
+        }
         appScope.launch { audio.ttsLease(gateway, active = true, profile) }
         bargeIn = settings
         cantListenOver = false
@@ -434,6 +441,21 @@ class VoiceController(
             // Chained chat: every listen waits while it's set, and one in flight is cut off. Not while the chat still
             // checks for a live call, which would start unmuted.
             _chat.update { it.copy(muted = !it.muted) }
+        }
+    }
+
+    /**
+     * Fork: the earphones [chat] was talking through went away. Its sound has stopped already; the chat ends, saying
+     * why, rather than going on from the phone's speaker.
+     */
+    private fun headsetLost(chat: Job?) {
+        scope.launch {
+            val why = runCatching { getString(Res.string.voice_error_headset_lost) }.getOrNull() ?: HEADSET_LOST
+            if (chat == null || chatJob !== chat) return@launch
+            _chat.update { it.copy(error = why) }
+            chatJob?.cancel()
+            chatJob = null
+            chainedAudio?.let { chainedAudio = null; it() }
         }
     }
 
@@ -1313,6 +1335,10 @@ class VoiceController(
     }
 
     private companion object {
+        /** Fork: the words where the catalogue can't be read (host tests); the app says them in its language. */
+        const val HEADSET_LOST = "Your earphones disconnected, so the voice chat stopped instead of playing on the phone's speaker."
+        const val HEADSET_MIC_UNAVAILABLE = "Your earphones' microphone can't be used here, so the phone's microphone is listening."
+
         const val MAX_FAILURES = 3
         /**
          * How long a new chat waits for earlier ones to let their route go. Past it, it goes on regardless: the

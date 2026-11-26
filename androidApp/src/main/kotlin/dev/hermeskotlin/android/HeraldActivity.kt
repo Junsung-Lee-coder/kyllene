@@ -8,6 +8,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.KeyEvent
+import dev.hermeskotlin.android.voice.VoiceMediaSession
+import dev.hermeskotlin.android.voice.voiceKeyEvent
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -84,6 +87,9 @@ class HeraldActivity : FragmentActivity() {
     /** Between onResume and onPause: what the user is looking at. */
     private val resumed = MutableStateFlow(false)
 
+    /** Fork: the earphones' button while the chat's voice is on, out of sight too (VoiceMediaSession). */
+    private var voiceButtons: VoiceMediaSession? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -97,6 +103,7 @@ class HeraldActivity : FragmentActivity() {
         followAppLockSetting()
         askForNotificationsOnFirstTurn()
         if (savedInstanceState == null) handleIntent(intent)
+        voiceButtons = VoiceMediaSession(this, lifecycleScope)
         val browser = InAppBrowser(this) { windowPrefs.getBoolean(KEY_DARK, false) }
         askPhoneQuestionsInApp()
         bots.republishIfIconChanged()
@@ -126,6 +133,20 @@ class HeraldActivity : FragmentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * Fork: in front, the earphones' play/pause/stop come here before any media session (Android's media-button
+     * routing), and reach the chat's voice first; other keys, and these when the chat doesn't take them, go on.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean = voiceKeyEvent(event) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = voiceKeyEvent(event) || super.onKeyUp(keyCode, event)
+
+    override fun onDestroy() {
+        voiceButtons?.close()
+        voiceButtons = null
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -42,6 +42,8 @@
     <string name="voice_error_play_reply">Impossible de jouer la réponse.</string>
     <string name="voice_error_call_on">Un appel est en cours.</string>
     <string name="voice_error_ended_elsewhere">Terminé pour un chat vocal lancé sur un autre écran.</string>
+    <string name="voice_error_headset_lost">Vos écouteurs se sont déconnectés : le chat vocal s'est arrêté au lieu de continuer sur le haut-parleur du téléphone.</string>
+    <string name="voice_error_headset_mic_unavailable">Le micro de vos écouteurs ne peut pas être utilisé ici : c'est le micro du téléphone qui écoute.</string>
     <string name="voice_error_live_start">Impossible de lancer l’appel en direct.</string>
     <string name="voice_error_live_vendor">GPT-Live n’a pas pu démarrer : %1$s</string>
     <string name="voice_error_live_no_answer">GPT-Live n’a envoyé aucune réponse.</string>

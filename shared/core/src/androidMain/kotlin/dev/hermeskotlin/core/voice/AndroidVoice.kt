@@ -15,6 +15,7 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.NoiseSuppressor
 import android.os.Build
+import dev.hermeskotlin.core.custom.HeadsetAudio
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
@@ -278,10 +279,16 @@ class AndroidSpeechPlayer(
 
     private val lock = Any()
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    /** Each chained chat open. The chat, a phone call and the assistant panel share this player. */
-    private val chatAudioOwners = mutableSetOf<Any>()
+    /**
+     * Each chained chat open, with whether it has talk-over on and what to do if its earphones go away. The chat, a
+     * phone call and the assistant panel share this player.
+     */
+    private class ChatAudio(val talkOver: Boolean, val onHeadsetLost: () -> Unit)
+    private val chatAudioOwners = mutableMapOf<Any, ChatAudio>()
     /** Puts the usual route back; set while the chained chats have call routing. */
     private var restoreChatAudio: (() -> Unit)? = null
+    /** Fork: where the held call routing goes ([HeadsetAudio.Route.Usual] while none is held). */
+    private var heldRoute = HeadsetAudio.Route.Usual
     /** Headphones or earbuds that come or go during a chained chat change its route. */
     private val outputsChanged = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = reroute()
@@ -314,15 +321,24 @@ class AndroidSpeechPlayer(
      * take leaves the chat on its usual one, never on the earpiece. Headphones that come or go mid-chat change the
      * route. The returned close action is safe to call again; the route goes back once every chat has closed.
      */
-    override fun chainedChatAudio(): () -> Unit = synchronized(lock) {
+    override fun chainedChatAudio(): () -> Unit = chainedChatAudio(talkOver = true) {}
+
+    /**
+     * Fork: every chained chat comes here, talk-over on or not. Earphones whose microphone the phone can talk through
+     * (Bluetooth, a wired or USB headset) take the chat as a live call takes them: call routing to them, so the
+     * recorder listens through their microphone and the voice plays in them ([HeadsetAudio.route]). Without them the
+     * stock rules above hold. If they go away mid-chat, what plays stops at once and [onHeadsetLost] is told; the
+     * chat's sound is never moved to the phone's speaker.
+     */
+    override fun chainedChatAudio(talkOver: Boolean, onHeadsetLost: () -> Unit): () -> Unit = synchronized(lock) {
         val owner = Any()
         if (chatAudioOwners.isEmpty()) runCatching { audioManager.registerAudioDeviceCallback(outputsChanged, null) }
-        chatAudioOwners += owner
+        chatAudioOwners[owner] = ChatAudio(talkOver, onHeadsetLost)
         reroute()
         return@synchronized {
             synchronized(lock) {
                 // An old chat's finally must not restore under a newer one, here or in another controller.
-                if (chatAudioOwners.remove(owner) && chatAudioOwners.isEmpty()) {
+                if (chatAudioOwners.remove(owner) != null && chatAudioOwners.isEmpty()) {
                     runCatching { audioManager.unregisterAudioDeviceCallback(outputsChanged) }
                     reroute()
                 }
@@ -330,29 +346,72 @@ class AndroidSpeechPlayer(
         }
     }
 
+    /** Fork: earphones are in whose microphone this chat can't use; it listens through the phone's own. */
+    override fun headsetMicUnavailable(): Boolean = synchronized(lock) { HeadsetAudio.micUnavailable(ports()) }
+
+    /** Fork: what's connected, as [HeadsetAudio] reads it. */
+    @SuppressLint("InlinedApi") // A device only reports the types its Android knows.
+    private fun ports(): HeadsetAudio.Ports {
+        val outputs = runCatching { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).map { it.type } }.getOrDefault(emptyList())
+        // Before Android 12 there's no communication device to pick: a Bluetooth headset's microphone isn't reachable.
+        val talkable = if (Build.VERSION.SDK_INT >= 31) {
+            runCatching { audioManager.availableCommunicationDevices.map { it.type } }.getOrDefault(emptyList())
+        } else emptyList()
+        return HeadsetAudio.Ports(
+            headsetWithMic = talkable.any { it in HEADSETS_WITH_MIC },
+            privateOutput = outputs.any { it in OWN_OUTPUTS },
+            earphonesWithoutUsableMic = outputs.any { it in EARPHONES },
+        )
+    }
+
     /** Call routing while a chained chat is open on the phone's own speaker, the usual route otherwise. */
     @Suppress("DEPRECATION")
-    private fun reroute(): Unit = synchronized(lock) {
-        val outputs = runCatching { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) }.getOrNull()
-        val wanted = chatAudioOwners.isNotEmpty() && outputs != null && outputs.none { it.type in OWN_OUTPUTS }
+    private fun reroute() {
+        val lost = mutableListOf<() -> Unit>()
+        synchronized(lock) {
+            val ports = ports()
+            // Fork: the earphones the chat was talking through went away. Silence it here and now, before the system
+            // moves its sound anywhere, and let the chats end; they aren't routed again meanwhile.
+            if (HeadsetAudio.headsetLost(heldRoute, ports)) {
+                runCatching { track?.pause(); track?.flush() }
+                runCatching { clip?.let { if (it.isPlaying) it.pause() } }
+                restoreChatAudio?.invoke()
+                restoreChatAudio = null
+                heldRoute = HeadsetAudio.Route.Usual
+                chatAudioOwners.values.mapTo(lost) { it.onHeadsetLost }
+                chatAudioOwners.keys.toList().forEach { chatAudioOwners[it] = ChatAudio(false) {} }
+            } else {
+                applyRoute(ports)
+            }
+        }
+        lost.forEach { runCatching { it() } }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applyRoute(ports: HeadsetAudio.Ports) {
+        val wanted = if (chatAudioOwners.isEmpty()) HeadsetAudio.Route.Usual
+            else HeadsetAudio.route(ports, talkOver = chatAudioOwners.values.any { it.talkOver })
         val held = restoreChatAudio
-        if (wanted && held != null) {
+        if (wanted != HeadsetAudio.Route.Usual && held != null && wanted == heldRoute) {
             // The system puts the mode back to normal once no call audio has played or listened for a few seconds,
             // as between a reply and the next turn (#408). Held routing is taken up again from there, or let go if it
             // won't take; a mode someone else holds, such as a phone call ringing or in progress, is left alone.
             if (audioManager.mode != AudioManager.MODE_NORMAL) return
-            if (!runCatching { callRouting() }.getOrDefault(false)) {
+            if (!runCatching { callRouting(wanted) }.getOrDefault(false)) {
                 held()
                 restoreChatAudio = null
+                heldRoute = HeadsetAudio.Route.Usual
             }
             return
         }
-        if (wanted == (held != null)) return
-        if (!wanted) {
-            held?.invoke()
+        if (wanted == HeadsetAudio.Route.Usual && held == null) return
+        // Another route than the one held: back to the usual one first, then the new one from there.
+        if (held != null) {
+            held()
             restoreChatAudio = null
-            return
+            heldRoute = HeadsetAudio.Route.Usual
         }
+        if (wanted == HeadsetAudio.Route.Usual) return
         val mode = audioManager.mode
         val speaker = audioManager.isSpeakerphoneOn
         val restore = {
@@ -362,21 +421,25 @@ class AndroidSpeechPlayer(
             Unit
         }
         try {
-            check(callRouting())
+            check(callRouting(wanted))
             restoreChatAudio = restore
+            heldRoute = wanted
         } catch (_: Exception) {
             restore()
         }
     }
 
-    /** Call mode on the phone's speaker; false (or a throw) when the speaker can't be the call's. */
+    /** Call mode on [to]: the earphones talked through, or the phone's speaker; false (or a throw) when it can't be. */
     @Suppress("DEPRECATION")
-    private fun callRouting(): Boolean {
+    private fun callRouting(to: HeadsetAudio.Route): Boolean {
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         if (Build.VERSION.SDK_INT >= 31) {
-            val builtIn = audioManager.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-            return builtIn != null && audioManager.setCommunicationDevice(builtIn)
+            val devices = audioManager.availableCommunicationDevices
+            val device = if (to == HeadsetAudio.Route.Headset) devices.firstOrNull { it.type in HEADSETS_WITH_MIC }
+                else devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            return device != null && audioManager.setCommunicationDevice(device)
         }
+        if (to == HeadsetAudio.Route.Headset) return false
         audioManager.isSpeakerphoneOn = true
         return true
     }
@@ -555,6 +618,23 @@ class AndroidSpeechPlayer(
             AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_ACCESSORY, AudioDeviceInfo.TYPE_USB_HEADSET,
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_HEARING_AID,
             AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER, AudioDeviceInfo.TYPE_BLE_BROADCAST,
+        )
+
+        /** Fork: communication devices with a microphone a chat can talk through, as a live call picks them. */
+        @SuppressLint("InlinedApi")
+        val HEADSETS_WITH_MIC = setOf(
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_USB_HEADSET,
+        )
+
+        /**
+         * Fork: outputs that are earphones, whose microphone the chat should use. A wired or USB headset isn't among
+         * them: its microphone is the phone's usual input anyway.
+         */
+        @SuppressLint("InlinedApi")
+        val EARPHONES = setOf(
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_HEARING_AID,
         )
     }
 }

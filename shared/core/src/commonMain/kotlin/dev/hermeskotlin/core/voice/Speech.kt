@@ -165,6 +165,16 @@ interface SpeechPlayer {
      */
     fun chainedChatAudio(): () -> Unit = {}
 
+    /**
+     * Fork: chained chat audio for every chained chat, [talkOver] on or not, so earphones with a usable microphone take
+     * the chat (HeadsetAudio). [onHeadsetLost] is told when they go away mid-chat; what was playing has stopped by
+     * then. A player without earphone routing keeps the stock rule: call audio for talk-over only.
+     */
+    fun chainedChatAudio(talkOver: Boolean, onHeadsetLost: () -> Unit): () -> Unit = if (talkOver) chainedChatAudio() else ({})
+
+    /** Fork: earphones are in whose microphone a chat can't use, so it listens through the device's own. */
+    fun headsetMicUnavailable(): Boolean = false
+
     /** Plays the local connection cue once; cancelling stops it. Unsupported devices stay silent. */
     suspend fun playRingback() = Unit
 

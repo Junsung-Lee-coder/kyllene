@@ -20,6 +20,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import dev.hermeskotlin.ui.clearOfWindowControls
 import dev.hermeskotlin.ui.hasSpeechPlayback
 import dev.hermeskotlin.ui.hasVoice
+import dev.hermeskotlin.ui.voice.VoiceButton
 import dev.hermeskotlin.ui.windowControlsHeight
 import dev.hermeskotlin.ui.isDesktop
 import dev.hermeskotlin.ui.frostedPanel
@@ -501,6 +502,19 @@ fun ChatScreen(
         microphone.withMicrophone(onDenied = { notice = dictationNeedsMic }) {
             viewModel.toggleDictation()
         }
+    }
+    // Fork: the earphones' play/pause button starts this chat's voice as `/voice` does, sends or ends it (VoiceButton).
+    val startFromButton by rememberUpdatedState {
+        when {
+            hasSpeechPlayback -> startVoiceChat(false)
+            hasVoice -> notice = voiceNeedsDecoder
+            else -> notice = noDesktopVoice
+        }
+    }
+    DisposableEffect(viewModel) {
+        val owner = Any()
+        VoiceButton.bind(owner, viewModel.voice) { startFromButton() }
+        onDispose { VoiceButton.unbind(owner) }
     }
     // Turning the phone rebuilds the screen without leaving it: the voice the chat owns plays on through it.
     val changingConfigurations = rememberChangingConfigurations()

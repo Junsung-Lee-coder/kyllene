@@ -42,6 +42,8 @@
     <string name="voice_error_play_reply">Não foi possível tocar a resposta.</string>
     <string name="voice_error_call_on">Há uma chamada em andamento.</string>
     <string name="voice_error_ended_elsewhere">Encerrada por uma conversa por voz iniciada em outra tela.</string>
+    <string name="voice_error_headset_lost">Seus fones se desconectaram, então a conversa por voz parou em vez de continuar no alto-falante do telefone.</string>
+    <string name="voice_error_headset_mic_unavailable">O microfone dos seus fones não pode ser usado aqui, então o microfone do telefone está ouvindo.</string>
     <string name="voice_error_live_start">Não foi possível iniciar a chamada ao vivo.</string>
     <string name="voice_error_live_vendor">O GPT-Live não conseguiu iniciar: %1$s</string>
     <string name="voice_error_live_no_answer">O GPT-Live não enviou resposta.</string>
