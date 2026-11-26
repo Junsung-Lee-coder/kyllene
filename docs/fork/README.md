@@ -43,7 +43,9 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
        sign-in screen says why;
      - which account each gateway's stored session was confirmed to be is kept on disk
        (`custom/SessionBindings.kt`). A new sign-in marks it pending before its credentials are stored, and only a
-       finished bind records the account; renewing tokens leaves it alone, and signing out clears it;
+       finished bind records the account; renewing tokens leaves it alone, and signing out clears it. A password
+       sign-in's cookies are the host's, whatever the port or path, so it marks every gateway on the same host (or
+       under the same domain) pending too; a browser sign-in's tokens are its gateway's alone;
      - every start of a kept session, offline too, gives the saved chats to the recorded account before anything
        reads them. With none recorded (a sign-in that didn't finish, or a session from before this), they're all put
        away until the gateway says whose they are. Once online, a session the gateway says is another account's is
@@ -116,7 +118,8 @@ For each conflict or failing test:
 - **Sign-in.** Every path that finishes a sign-in must call `bindOwner` before anything reads the cache, and must not
   go on when it returns false. Every path that starts a kept session (`AppViewModel` `init` and `open`) must call
   `keptSessionCache` before routing to a chat. Any new way of storing a new account's credentials must go through
-  `AuthApi.newCredentials`, so the binding is marked pending first. If upstream changes `/api/auth/me` or how accounts are named, keep the owner as
+  `AuthApi.newCredentials`, so the binding is marked pending first, with `cookies = true` when the credentials are
+  cookies (they reach every gateway on the host). If upstream changes `/api/auth/me` or how accounts are named, keep the owner as
   provider and user id.
 - **The database.** If upstream bumps the cache database version, add a real migration or the copies are wiped. Keep
   the fork's DAO queries.
