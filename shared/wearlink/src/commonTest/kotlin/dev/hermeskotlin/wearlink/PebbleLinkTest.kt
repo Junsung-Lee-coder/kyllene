@@ -15,7 +15,7 @@ class PebbleLinkTest {
     fun anAskFromTheWatchIsNeverReadAloudAndABlankChatIsANewOne() {
         val dict = mapOf(PebbleKeys.TYPE to num(PebbleTypes.ASK), PebbleKeys.ASK_ID to text("p1"), PebbleKeys.TEXT to text("hello"), PebbleKeys.CHAT_ID to text(""))
         val ask = PebbleLink.decode(dict) as PebbleIncoming.Ask
-        assertEquals(WatchAsk(id = "p1", text = "hello", chatId = null, speak = false), ask.toWatchAsk())
+        assertEquals(WatchAsk(id = "p1", text = "hello", chatId = null, speak = false, newChat = true), ask.toWatchAsk())
     }
 
     @Test

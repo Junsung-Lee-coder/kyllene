@@ -347,7 +347,9 @@ class WatchRelay(
      */
     suspend fun chatForCall(chatId: String?, botProfile: String? = null, defaultRequestId: String? = null, node: String? = null, scope: WatchScope? = null,
         /** A call the watch started by voice: with no conversation chosen it goes to the default one ([DefaultVoiceConversation]). */
-        voiceDefault: Boolean = false): CallChat {
+        voiceDefault: Boolean = false,
+        /** The watch picked New chat: it isn't sent to the default one. */
+        newChat: Boolean = false): CallChat {
         val saved = gateways.current()
         if (saved == null || !auth.hasStoredSession(saved.gatewayUrl) || connection.state.value is ConnectionState.SessionExpired) {
             return failCall(WatchCallLine.SignedOut)
@@ -365,7 +367,7 @@ class WatchRelay(
             return failCall(WatchCallLine.TargetChanged)
         }
         val profile = if (default != null) default.profile else if (scope != null) scope.profile else botProfile ?: profiles.get(gateway)
-        val fallback = if (voiceDefault && default == null && defaultRequestId == null) defaultVoiceChat(gateway, chatId, botProfile, profile) else null
+        val fallback = if (voiceDefault && default == null && defaultRequestId == null) defaultVoiceChat(gateway, chatId, botProfile, profile, newChat) else null
         connection.start(gateway)
         if (withTimeoutOrNull(CONNECT_MS) { connection.state.first { it is ConnectionState.Connected } } == null) {
             connection.retry()
@@ -395,9 +397,10 @@ class WatchRelay(
     private suspend fun failCall(line: WatchCallLine) = CallChat.Failed(words.say(line))
 
     /** Fork: the Default Call Target's conversation for a watch voice request that chose none, else null (stock). */
-    private suspend fun defaultVoiceChat(gateway: GatewayUrl, chatId: String?, botProfile: String?, profile: String?): String? {
+    private suspend fun defaultVoiceChat(gateway: GatewayUrl, chatId: String?, botProfile: String?, profile: String?, newChat: Boolean): String? {
+        if (newChat) return null
         val targets = withTimeoutOrNull(CONNECT_MS) { settings.settings.filterNotNull().first() }?.callTargets ?: return null
-        return DefaultVoiceConversation.storedSessionFor(targets[gateway.value], chatId, botProfile, profile)
+        return DefaultVoiceConversation.storedSessionFor(targets[gateway.value], chatId, botProfile, profile, newChat)
     }
 
     /** Why a call (or its Default Call Target) can't go ahead: said in the app's language once caught, else in English. */
@@ -568,7 +571,7 @@ class WatchRelay(
         last = last.copy(scope = WatchScope(gateway.value, profile))
         connection.start(gateway)
 
-        val storedId = if (botProfile == null) ask.chatId ?: defaultVoiceChat(gateway, ask.chatId, null, profile) else try {
+        val storedId = if (botProfile == null) ask.chatId ?: defaultVoiceChat(gateway, ask.chatId, null, profile, ask.newChat) else try {
             if (withTimeoutOrNull(CONNECT_MS) { connection.state.first { it is ConnectionState.Connected } } == null) {
                 connection.retry()
                 return fail("Kyllene can't reach your gateway right now.")

@@ -220,7 +220,7 @@ class WatchLink(
         dismissCall()
         val id = UUID.randomUUID().toString()
         val chat = store.chat.value
-        val ask = WatchAsk(id, text.orEmpty().trim(), chat.id, speak = store.speak.value && speech.canPlay(), audioType = audioType, botProfile = chat.botProfile, scope = chat.scope)
+        val ask = WatchAsk(id, text.orEmpty().trim(), chat.id, speak = store.speak.value && speech.canPlay(), audioType = audioType, botProfile = chat.botProfile, scope = chat.scope, newChat = chat.newChat)
         _turn.value = WatchTurn(id, text?.trim(), ReplyUpdate(id, if (audio != null) ReplyPhase.Transcribing else ReplyPhase.Sending, chatId = chat.id, title = chat.title))
         if (chat.botProfile != null && !botChats) return fail(id, say(R.string.wear_update_for_bots))
         val generation = _profileReset.value
@@ -330,7 +330,7 @@ class WatchLink(
                 val offer = call.offer()
                 if (generation != _profileReset.value || _call.value?.id != id) return@launch
                 send(if (defaultRequestId != null) WearPaths.DEFAULT_CALL_START else if (chat.botProfile == null) WearPaths.CALL_START else WearPaths.BOT_CALL_START,
-                    WearJson.encode(CallStart(id, chat.id, offer, chat.botProfile, defaultRequestId, chat.scope))) { generation == _profileReset.value && profileChecked && _call.value?.id == id }?.let { return@launch finishCall(id, it) }
+                    WearJson.encode(CallStart(id, chat.id, offer, chat.botProfile, defaultRequestId, chat.scope, newChat = chat.newChat && defaultRequestId == null))) { generation == _profileReset.value && profileChecked && _call.value?.id == id }?.let { return@launch finishCall(id, it) }
                 _call.update { if (it?.id == id && it.stage == CallStage.Starting) it.copy(stage = CallStage.Connecting) else it }
                 launch {
                     delay(ANSWER_WITHIN_MS)
@@ -500,7 +500,7 @@ class WatchLink(
         // A call talks in its chat: another one hangs it up.
         endCall()
         dismissCall()
-        store.setChat(null, null, scope = store.phoneScope.takeIf { profileSync && profileChecked })
+        store.setChat(null, null, scope = store.phoneScope.takeIf { profileSync && profileChecked }, newChat = true)
         _liveVoice.value = false
         refreshPhone()
         _turn.value = null

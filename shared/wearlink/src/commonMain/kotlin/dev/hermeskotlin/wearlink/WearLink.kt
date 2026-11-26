@@ -150,6 +150,11 @@ data class WatchAsk(
     /** A bot's permanent conversation, resolved by the phone rather than a possibly stale stored id. */
     val botProfile: String? = null,
     val scope: WatchScope? = null,
+    /**
+     * Fork: no [chatId] because New chat was picked on the watch, not because none was chosen; the phone then
+     * starts a new chat even when a default conversation is set. Left out when false, so either side may be older.
+     */
+    val newChat: Boolean = false,
 )
 
 /** What a [WearPaths.recordingPath] channel carries: the ask's length (4 bytes, big-endian), the ask, then the audio. */
@@ -305,7 +310,9 @@ data class PhoneStatus(
 
 /** Starts call [id] in [chatId] (null: a new chat), with the watch's WebRTC [offerSdp]. */
 @Serializable
-data class CallStart(val id: String, val chatId: String?, val offerSdp: String, val botProfile: String? = null, val defaultRequestId: String? = null, val scope: WatchScope? = null)
+data class CallStart(val id: String, val chatId: String?, val offerSdp: String, val botProfile: String? = null, val defaultRequestId: String? = null, val scope: WatchScope? = null,
+    /** Fork: as [WatchAsk.newChat]. */
+    val newChat: Boolean = false)
 
 /** Event-channel messages of call [callId], in order; [seq] counts each side's batches, so a late one is told apart. */
 @Serializable

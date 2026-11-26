@@ -200,7 +200,8 @@ object PebbleLink {
     }
 
     /** The watch's ask, for the relay: never read aloud, since a Pebble has no voice to play it in. */
-    fun PebbleIncoming.Ask.toWatchAsk(): WatchAsk = WatchAsk(id = id, text = text, chatId = chatId, speak = false, scope = scope)
+    // Fork: a Pebble ask without a chat id is the Pebble's New chat, so it never goes to the default conversation.
+    fun PebbleIncoming.Ask.toWatchAsk(): WatchAsk = WatchAsk(id = id, text = text, chatId = chatId, speak = false, scope = scope, newChat = chatId == null)
 
     /**
      * [scope] as the watch keeps it: the gateway, then the profile on a line of its own when there is one. Null when

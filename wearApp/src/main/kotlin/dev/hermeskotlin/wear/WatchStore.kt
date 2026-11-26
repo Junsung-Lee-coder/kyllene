@@ -13,7 +13,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * The chat the watch talks in (null id: the next ask starts one), with its [model] and how full its context is
  * ([contextPercent]) as the last turn there told.
  */
-data class WatchChatChoice(val id: String?, val title: String?, val model: String? = null, val contextPercent: Int? = null, val botProfile: String? = null, val scope: WatchScope? = null)
+data class WatchChatChoice(val id: String?, val title: String?, val model: String? = null, val contextPercent: Int? = null, val botProfile: String? = null, val scope: WatchScope? = null,
+    /** Fork: New chat was picked here (see [explicitNewChat]); false when nothing was chosen. */
+    val newChat: Boolean = false)
 
 /** What the watch remembers between launches: its chat, whether replies are read aloud, and the last reply (for the tile). */
 class WatchStore(context: Context) {
@@ -53,6 +55,7 @@ class WatchStore(context: Context) {
             prefs.getInt(CONTEXT, -1).takeIf { it >= 0 },
             prefs.getString(BOT_PROFILE, null),
             savedScope,
+            explicitNewChat(prefs.getBoolean(NEW_CHAT, false), prefs.getString(CHAT_ID, null), prefs.getString(BOT_PROFILE, null)),
         ).let { if (prefs.contains(CHAT_SCOPE) && savedScope == null) WatchChatChoice(null, null) else it },
     )
     val chat: StateFlow<WatchChatChoice> = _chat.asStateFlow()
@@ -61,8 +64,9 @@ class WatchStore(context: Context) {
     val speak: StateFlow<Boolean> = _speak.asStateFlow()
 
     /** Picked here: another chat forgets the last one's model and context. */
-    fun setChat(id: String?, title: String?, botProfile: String? = null, scope: WatchScope? = null) =
-        save(id, title, keepStats = id == _chat.value.id && botProfile == _chat.value.botProfile && scope == _chat.value.scope, botProfile = botProfile, scope = scope)
+    fun setChat(id: String?, title: String?, botProfile: String? = null, scope: WatchScope? = null, newChat: Boolean = false) =
+        save(id, title, keepStats = id == _chat.value.id && botProfile == _chat.value.botProfile && scope == _chat.value.scope, botProfile = botProfile, scope = scope,
+            newChat = explicitNewChat(newChat, id, botProfile))
 
     /** Named in a reply: a new chat getting its id keeps what its turn told. */
     fun adoptChat(id: String, title: String?, scope: WatchScope? = null) {
@@ -70,9 +74,9 @@ class WatchStore(context: Context) {
         save(id, if (now.botProfile != null) now.title else title, keepStats = id == now.id || now.id == null, botProfile = now.botProfile, scope = scope ?: now.scope)
     }
 
-    private fun save(id: String?, title: String?, keepStats: Boolean, botProfile: String?, scope: WatchScope?) {
+    private fun save(id: String?, title: String?, keepStats: Boolean, botProfile: String?, scope: WatchScope?, newChat: Boolean = false) {
         val now = _chat.value
-        save(WatchChatChoice(id, title?.takeIf { it.isNotBlank() }, now.model.takeIf { keepStats }, now.contextPercent.takeIf { keepStats }, botProfile, scope))
+        save(WatchChatChoice(id, title?.takeIf { it.isNotBlank() }, now.model.takeIf { keepStats }, now.contextPercent.takeIf { keepStats }, botProfile, scope, newChat))
     }
 
     fun setStats(model: String?, contextPercent: Int?) {
@@ -90,6 +94,7 @@ class WatchStore(context: Context) {
             putInt(CONTEXT, choice.contextPercent ?: -1)
             putString(BOT_PROFILE, choice.botProfile)
             putString(CHAT_SCOPE, choice.scope?.let { WearJson.encode(it).decodeToString() })
+            putBoolean(NEW_CHAT, choice.newChat)
         }
     }
 
@@ -121,6 +126,7 @@ class WatchStore(context: Context) {
         const val PHONE_SCOPE = "phone_scope"
         const val PHONE_NODE = "phone_node"
         const val CHAT_SCOPE = "chat_scope"
+        const val NEW_CHAT = "new_chat"
         const val ACCENT = "accent"
         const val CHAT_ID = "chat_id"
         const val BOT_PROFILE = "bot_profile"
