@@ -101,19 +101,31 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
    - The chained voice chat (talk-over on or off) is routed to earphones with a microphone (Bluetooth SCO or LE, a
      wired or USB headset), on Android 12 and later: it listens through their microphone and plays in them, as a
      live call does. Earphones whose microphone can't be used are said in the voice panel's error line.
-   - If those earphones go away mid-chat, what plays stops at once and the chat ends saying why; nothing moves to
-     the phone's speaker. A live call routed to earphones hangs up the same way.
+   - If the earphones (or any output other than the phone's own) the chat has been playing through go away
+     mid-chat, on any route (a call-routed headset, music-only Bluetooth earbuds, wired headphones, Bluetooth on
+     Android 8–11), what plays stops and the chat ends saying why. Nothing moves to the phone's speaker, not even
+     talk-over's speaker routing. Android's `ACTION_AUDIO_BECOMING_NOISY` warning and the device callback both trigger
+     it (`HeadsetAudio.Tracker`). A live call routed to a headset with a microphone hangs up the same way. A live
+     call with music-only earbuds plays on the phone's speaker, as stock does; that isn't covered yet.
    - Play, pause, play/pause, the headset hook and stop are one toggle: start the chat's voice (as `/voice` does),
      send what the chained chat heard, or end a live call or the chat. One press counts once; the next press is its
-     own. In front, the activity takes the key (`onKeyDown`/`onKeyUp`); with voice on, a media session takes it out
-     of sight too. Read aloud keeps the button while it reads, and other keys go on as before.
+     own. In front, the activity takes the keys it's given (`onKeyDown`/`onKeyUp`): wired and USB headset keys. With
+     voice on, a media session is active for them, out of sight too. Bluetooth earbud presses normally go to a media
+     session, so starting voice with them while voice is off, and whether the voice session wins them out of sight,
+     are untested on a device. The fork doesn't hold the button from music apps while voice is off. Read aloud keeps
+     it while it reads, and other keys go on as before.
+   - There's no manual Talk yet (a recording that only ends when you end it); the chained chat still ends a turn
+     on a pause, as stock does.
    - Rules: `shared/core/.../custom/HeadsetAudio.kt` (route) and `shared/ui/.../voice/VoiceButton.kt` (toggle).
      Seams: `SpeechPlayer.chainedChatAudio(talkOver, onHeadsetLost)` and `headsetMicUnavailable()` (`Speech.kt`),
      their Android player (`AndroidVoice.kt`), `AndroidLiveCall.kt`'s headset watch, `VoiceController.converseChained`
      and `headsetLost`, the `ChatScreen` binding, `androidApp/.../voice/VoiceMediaButtons.kt` and two
      `HeraldActivity` overrides. Two strings, in every language.
-   - Tests: `core/custom/HeadsetAudioTest.kt`, `ui/voice/PhoneVoiceControlsTest.kt` (the real `VoiceController`,
-     chained and live).
+   - Tests: `core/custom/HeadsetAudioTest.kt` (the routes and the `Tracker` transitions the Android player runs),
+     `ui/voice/PhoneVoiceControlsTest.kt` (the real `VoiceController`, chained and live, including one driven by the
+     `Tracker`), and `androidHostTest/.../ui/voice/AndroidHeadsetAudioTest.kt` (the real `AndroidSpeechPlayer` on
+     Robolectric's audio manager, `BECOMING_NOISY` included). The stock `AndroidChainedAudioTest` case for unplugged
+     headphones now expects the chat silenced rather than speaker call routing.
 
 The fork doesn't change the settings screens or layout. The watch app changes only as described above.
 
@@ -155,7 +167,7 @@ For each conflict or failing test:
 
 - **Phone voice.** If upstream changes `converseChained`, keep its one `chainedChatAudio(talkOver, …)` call for every
   chained chat. If it changes Android routing in `AndroidSpeechPlayer`, keep the earphone route and the "lost
-  earphones stop, never the speaker" rule. If it adds its own media-button handling, route these keys to
+  earphones stop, never the speaker" rule for every route, and the `ACTION_AUDIO_BECOMING_NOISY` receiver. If it adds its own media-button handling, route these keys to
   `VoiceButton` from there instead of the fork's session.
 
 Then update the table above and run:
