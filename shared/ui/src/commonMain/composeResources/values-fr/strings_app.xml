@@ -78,6 +78,7 @@
     <string name="app_session_expired">Session expirée</string>
     <string name="app_connection_refused">Connexion refusée</string>
     <string name="app_sign_in_again">Votre session a expiré. Reconnectez-vous.</string>
+    <string name="app_sign_in_saved_chats_not_put_away">Les discussions enregistrées sur cet appareil pour le dernier compte n'ont pas pu être mises de côté, la connexion n'a donc pas eu lieu. Réessayez.</string>
     <string name="app_chat_fallback_title">Chat</string>
     <string name="app_untitled_session">Session sans titre</string>
     <string name="app_share_bot_gone">Impossible d’ouvrir le chat de %1$s : le partage est donc dans un nouveau chat.</string>

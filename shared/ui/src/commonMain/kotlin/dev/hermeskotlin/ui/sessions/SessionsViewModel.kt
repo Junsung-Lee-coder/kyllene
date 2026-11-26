@@ -672,11 +672,15 @@ class SessionsViewModel(
     fun delete(session: SessionSummary) = mutate(
         apply = { list -> list.filterNot { it.id == session.id } },
         call = { url, profile ->
-            api.delete(url, session.id, profile).also {
-                if (it is ApiResult.Success) {
+            api.delete(url, session.id, profile).let {
+                // Fork: a chat the gateway no longer has (404) is gone there already; deleting it drops the device's
+                // copy, which is kept otherwise (RetainedCopies), and counts as done.
+                val gone = it is ApiResult.Failed && it.status == HTTP_NOT_FOUND
+                if (it is ApiResult.Success || gone) {
                     lastChats.forget(url, session.id, profile)
                     cache?.forgetChat(url, profile, session.id)
                 }
+                if (gone) ApiResult.Success(Unit) else it
             }
         },
     )
@@ -891,6 +895,9 @@ class SessionsViewModel(
     }
 
     private companion object {
+        /** Fork: what a gateway answers for a chat it doesn't have. */
+        const val HTTP_NOT_FOUND = 404
+
         /** Fork: the chat list couldn't be saved on this device; what was saved before stays. */
         const val LIST_NOT_SAVED = "Couldn't save the chat list on this device."
 

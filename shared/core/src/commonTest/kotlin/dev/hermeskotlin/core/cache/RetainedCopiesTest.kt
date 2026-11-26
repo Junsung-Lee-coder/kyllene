@@ -178,4 +178,151 @@ class RetainedCopiesTest {
         assertNull(RetainedCopies.join(listOf(pieces[1], pieces[0]) + pieces.drop(2)))
         assertEquals(listOf("{}"), RetainedCopies.join(listOf("{}")))
     }
+
+    // Fork repair: unreadable rows are set aside, never dropped with the readable ones.
+
+    /** Plain text, but a row starting with "X" doesn't open, as a damaged or foreign-key row wouldn't. */
+    private object Tampered : Sealer {
+        override suspend fun seal(plain: String) = plain.encodeToByteArray()
+        override suspend fun open(sealed: ByteArray): String? = sealed.decodeToString().takeUnless { it.startsWith("X") }
+    }
+
+    private suspend fun tamper(gateway: String, profile: String, session: String, position: Int) {
+        val transcript = dao.transcript(gateway, profile, session)!!
+        val rows = dao.messages(gateway, profile, session).map {
+            if (it.position == position) SavedMessageRow(it.gateway, it.profile, it.sessionId, it.position, "X".encodeToByteArray() + it.row) else it
+        }
+        dao.replaceTranscript(transcript, rows)
+    }
+
+    @Test
+    fun aDamagedPieceThenASaveKeepsTheOtherRowsAndSetsTheOriginalAside() = runTest {
+        val tampered = OfflineCache(dao, Tampered, EmptyCoroutineContext) { clock }
+        val huge = "y".repeat(OfflineCache.MAX_PIECE_CHARS * 2 + 5)
+        tampered.saveTranscript(url, null, "c", listOf(row(1), row(2, huge), row(3)), "c")
+        val stored = dao.messages(url.value, "", "c")
+        assertTrue(stored.size == 5, "row 2 is in 3 pieces: ${stored.size}")
+        tamper(url.value, "", "c", position = 2) // the middle piece of row 2
+        assertNull(tampered.savedTranscript(url, null, "c"))
+
+        assertNotNull(tampered.saveTranscript(url, null, "c", listOf(row(4)), "c"))
+
+        assertEquals(listOf(1L, 3L, 4L), tampered.savedTranscript(url, null, "c")?.rows?.map { it.id })
+        val aside = dao.gatewayKeys().single { RetainedCopies.isPutAway(it, url.value) }
+        assertEquals(stored.size, dao.messages(aside, "", "c").size)
+        assertTrue(dao.messages(aside, "", "c")[2].row.decodeToString().startsWith("X"))
+    }
+
+    @Test
+    fun aRowThatDoesntOpenThenASaveKeepsTheOthers() = runTest {
+        val tampered = OfflineCache(dao, Tampered, EmptyCoroutineContext) { clock }
+        tampered.saveTranscript(url, null, "c", (1L..6L).map { row(it) }, "c")
+        tamper(url.value, "", "c", position = 0)
+        tampered.saveTranscript(url, null, "c", listOf(row(7)), "c")
+        assertEquals((2L..7L).toList(), tampered.savedTranscript(url, null, "c")?.rows?.map { it.id })
+        assertEquals(1, dao.gatewayKeys().count { RetainedCopies.isPutAway(it, url.value) })
+    }
+
+    @Test
+    fun aListEntryThatDoesntOpenThenASaveKeepsTheOthers() = runTest {
+        val tampered = OfflineCache(dao, Tampered, EmptyCoroutineContext) { clock }
+        tampered.saveList(url, null, SessionListFilter.Recent, listOf(SessionSummary("a"), SessionSummary("b"), SessionSummary("c")))
+        val rows = dao.list(url.value, "", SessionListFilter.Recent.name)
+        dao.replaceList(url.value, "", SessionListFilter.Recent.name, rows.map {
+            if (it.id == "b") SavedListRow(it.gateway, it.profile, it.filter, it.id, it.position, it.savedAt, "X".encodeToByteArray() + it.row) else it
+        })
+
+        assertNotNull(tampered.saveList(url, null, SessionListFilter.Recent, listOf(SessionSummary("d"))))
+
+        assertEquals(listOf("d", "a", "c"), tampered.savedList(url, null, SessionListFilter.Recent)?.sessions?.map { it.id })
+        val aside = dao.gatewayKeys().single { RetainedCopies.isPutAway(it, url.value) }
+        assertEquals(3, dao.list(aside, "", SessionListFilter.Recent.name).size)
+    }
+
+    // Fork repair: copies belong to the verified account.
+
+    private val alice = RetainedCopies.owner("password", "alice")
+    private val bob = RetainedCopies.owner("password", "bob")
+
+    private suspend fun text(chat: String = "c") = cache.savedTranscript(url, null, chat)?.rows?.map { it.text }
+
+    @Test
+    fun copiesFollowTheVerifiedAccount() = runTest {
+        assertTrue(cache.bindOwner(url, alice))
+        cache.saveTranscript(url, null, "c", listOf(row(1, "alice's")), "c")
+        assertTrue(cache.bindOwner(url, alice))
+        assertEquals(listOf("alice's"), text())
+
+        assertTrue(cache.bindOwner(url, bob))
+        assertNull(text())
+        cache.saveTranscript(url, null, "c", listOf(row(9, "bob's")), "c")
+        assertEquals(listOf("bob's"), text())
+
+        assertTrue(cache.bindOwner(url, alice))
+        assertEquals(listOf("alice's"), text())
+        assertTrue(cache.bindOwner(url, bob))
+        assertEquals(listOf("bob's"), text())
+    }
+
+    @Test
+    fun aDetachedAccountsRowsComeBackUnderTheOnesReadSince() = runTest {
+        cache.bindOwner(url, alice)
+        cache.saveTranscript(url, null, "c", listOf(row(1), row(2, "old")), "c")
+        cache.detachGateway(url)
+        // Alice signs in again, but her copies can't be found to bring back; she reads on meanwhile.
+        val blind = OfflineCache(object : OfflineDao by dao {
+            override suspend fun transcriptGateways(): List<String> = throw IllegalStateException("busy")
+        }, PlainSealer, EmptyCoroutineContext) { clock }
+        assertTrue(blind.bindOwner(url, alice))
+        cache.saveTranscript(url, null, "c", listOf(row(2, "new"), row(3)), "c")
+        assertEquals(listOf(2L, 3L), saved())
+        // The next sign-in as Alice brings them back, under what she read since.
+        assertTrue(cache.bindOwner(url, alice))
+        val rows = assertNotNull(cache.savedTranscript(url, null, "c")).rows
+        assertEquals(listOf(1L, 2L, 3L), rows.map { it.id })
+        assertEquals("new", rows[1].text)
+    }
+
+    @Test
+    fun anUnverifiedSignInPutsCopiesAwayAndGivesNoneBack() = runTest {
+        cache.bindOwner(url, alice)
+        cache.saveTranscript(url, null, "c", listOf(row(1, "alice's")), "c")
+        assertTrue(cache.bindOwner(url, null))
+        assertNull(text())
+        // What an unverified session saves belongs to no known account: put away at the next verified sign-in too.
+        cache.saveTranscript(url, null, "c", listOf(row(5, "unknown")), "c")
+        cache.bindOwner(url, alice)
+        assertEquals(listOf("alice's"), text())
+        assertEquals(1, dao.gatewayKeys().count { RetainedCopies.isPutAway(it, url.value) })
+    }
+
+    @Test
+    fun aDetachThatFailsIsAFailedBindAndMovesNothing() = runTest {
+        cache.bindOwner(url, alice)
+        cache.saveTranscript(url, null, "c", listOf(row(1, "alice's")), "c")
+        val stuck = OfflineCache(object : OfflineDao by dao {
+            override suspend fun moveGateway(from: String, to: String) = throw IllegalStateException("disk full")
+        }, PlainSealer, EmptyCoroutineContext) { clock }
+
+        assertEquals(false, stuck.bindOwner(url, bob))
+        assertNull(stuck.detachGateway(url))
+        assertEquals(listOf("alice's"), text())
+        assertTrue(stuck.bindOwner(url, alice))
+    }
+
+    @Test
+    fun copiesPutAwayCanBeDeletedForOneGatewayOrAll() = runTest {
+        val other = GatewayUrl.parse("https://work.example.ts.net")
+        cache.saveTranscript(url, null, "c", listOf(row(1)), "c")
+        cache.saveTranscript(other, null, "w", listOf(row(1)), "w")
+        cache.detachGateway(url)
+        cache.detachGateway(other)
+        cache.saveTranscript(url, null, "c", listOf(row(2)), "c")
+
+        assertNotNull(cache.forgetPutAway(url))
+        assertEquals(setOf(url.value), dao.gatewayKeys().filterNot { RetainedCopies.isPutAway(it, other.value) }.toSet())
+        assertNotNull(cache.forgetPutAway())
+        assertEquals(setOf(url.value), dao.gatewayKeys())
+        assertEquals(listOf(2L), saved())
+    }
 }

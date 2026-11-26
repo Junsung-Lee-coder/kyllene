@@ -78,6 +78,7 @@
     <string name="app_session_expired">Sesión caducada</string>
     <string name="app_connection_refused">Conexión rechazada</string>
     <string name="app_sign_in_again">Tu sesión caducó. Vuelve a iniciar sesión.</string>
+    <string name="app_sign_in_saved_chats_not_put_away">No se pudieron apartar los chats guardados en este dispositivo para la última cuenta, así que no se inició sesión. Inténtalo de nuevo.</string>
     <string name="app_chat_fallback_title">Chat</string>
     <string name="app_untitled_session">Sesión sin título</string>
     <string name="app_share_bot_gone">No se pudo abrir el chat de %1$s, así que lo compartido está en un chat nuevo.</string>

@@ -83,6 +83,7 @@
     <string name="app_session_expired">Session expired</string>
     <string name="app_connection_refused">Connection refused</string>
     <string name="app_sign_in_again">Your session expired. Sign in again.</string>
+    <string name="app_sign_in_saved_chats_not_put_away">The chats saved on this device for the last account couldn't be put away, so you weren't signed in. Try again.</string>
     <string name="app_chat_fallback_title">Chat</string>
     <string name="app_untitled_session">Untitled session</string>
     <string name="app_share_bot_gone">Couldn’t open %1$s’s chat, so the share is in a new chat.</string>

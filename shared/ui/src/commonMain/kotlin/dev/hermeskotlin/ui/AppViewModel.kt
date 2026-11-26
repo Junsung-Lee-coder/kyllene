@@ -18,12 +18,14 @@ import dev.hermeskotlin.core.chat.DraftStart
 import dev.hermeskotlin.core.chat.LastChatStore
 import dev.hermeskotlin.core.connection.ConnectionState
 import dev.hermeskotlin.core.connection.GatewayConnection
+import dev.hermeskotlin.core.custom.RetainedCopies
 import dev.hermeskotlin.core.gateway.AccessTokens
 import dev.hermeskotlin.core.gateway.ClientCertAliases
 import dev.hermeskotlin.core.gateway.GatewayList
 import dev.hermeskotlin.core.gateway.GatewayRepository
 import dev.hermeskotlin.core.inbox.InboxStore
 import dev.hermeskotlin.ui.inbox.ReportChat
+import dev.hermeskotlin.core.gateway.GatewayUrl
 import dev.hermeskotlin.core.gateway.SavedGateway
 import dev.hermeskotlin.core.profiles.ProfileStore
 import dev.hermeskotlin.core.bots.BotsApi
@@ -54,7 +56,12 @@ import dev.hermeskotlin.ui.resources.*
 import org.jetbrains.compose.resources.getString
 
 /** Why the sign-in page opened on its own; the page words it. */
-enum class SignInNotice { SessionExpired }
+enum class SignInNotice {
+    SessionExpired,
+
+    /** Fork: the chats saved on this device for another account couldn't be put away, so signing in didn't go on. */
+    SavedChatsNotPutAway,
+}
 
 /** Why a call from a shortcut didn't start; the dialog words it. */
 sealed interface CallError {
@@ -188,7 +195,10 @@ class AppViewModel(
             val saved = list.current ?: list.primary?.also { gateways.select(it.url) }
             _route.value = when {
                 saved == null -> Route.Connect()
-                auth.hasStoredSession(saved.gatewayUrl) -> home(saved).also { connection.start(saved.gatewayUrl) }
+                auth.hasStoredSession(saved.gatewayUrl) -> home(saved).also {
+                    connection.start(saved.gatewayUrl)
+                    confirmCacheOwner(saved.gatewayUrl)
+                }
                 else -> Route.SignIn(saved)
             }
         }
@@ -295,6 +305,13 @@ class AppViewModel(
             // pending pick so none shadows a saved gateway's certificate.
             certs.clear()
             if (saved.clientCertAlias != null) certs.changed(saved.gatewayUrl.host)
+            // Fork: before anything reads the device's saved chats, they're the account's just signed in to; another
+            // account's are put away (OfflineCache.bindOwner). If they can't be, this sign-in doesn't go on.
+            if (cache != null && !cache.bindOwner(saved.gatewayUrl, cacheOwner(saved.gatewayUrl))) {
+                auth.signOut(saved.gatewayUrl)
+                _route.value = Route.SignIn(saved, notice = SignInNotice.SavedChatsNotPutAway)
+                return@launch
+            }
             sessionsChanged.update { it + 1 }
             connection.start(saved.gatewayUrl)
             _route.value = home(saved)
@@ -624,8 +641,24 @@ class AppViewModel(
         connection.stop()
         host.close()
         gateways.select(gateway.url)
-        _route.value = if (auth.hasStoredSession(gateway.gatewayUrl)) home(gateway, fresh).also { connection.start(gateway.gatewayUrl) }
+        _route.value = if (auth.hasStoredSession(gateway.gatewayUrl)) home(gateway, fresh).also {
+            connection.start(gateway.gatewayUrl)
+            confirmCacheOwner(gateway.gatewayUrl)
+        }
         else Route.SignIn(gateway)
+    }
+
+    /** Fork: the account [gateway]'s session is for, as the gateway verifies it; null when it can't say. */
+    private suspend fun cacheOwner(gateway: GatewayUrl): String? =
+        (auth.me(gateway) as? ApiResult.Success)?.value?.let { RetainedCopies.owner(it.provider, it.userId) }
+
+    /**
+     * Fork: a session kept from before is checked once the gateway answers. Copies saved before owners were recorded,
+     * or for another account, are put away then. Unverified (offline), nothing changes.
+     */
+    private fun confirmCacheOwner(gateway: GatewayUrl) {
+        val cache = cache ?: return
+        viewModelScope.launch { cacheOwner(gateway)?.let { cache.bindOwner(gateway, it) } }
     }
 
     /** The last chat the user had open on [gateway] in its picked profile, or a fresh one (always, with [fresh]). */

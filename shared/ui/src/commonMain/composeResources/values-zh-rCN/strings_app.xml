@@ -78,6 +78,7 @@
     <string name="app_session_expired">会话已过期</string>
     <string name="app_connection_refused">连接被拒绝</string>
     <string name="app_sign_in_again">你的会话已过期，请重新登录。</string>
+    <string name="app_sign_in_saved_chats_not_put_away">无法将此设备上为上一个账号保存的聊天单独存放，因此未登录。请重试。</string>
     <string name="app_chat_fallback_title">对话</string>
     <string name="app_untitled_session">未命名会话</string>
     <string name="app_share_bot_gone">无法打开 %1$s 的对话，所以分享的内容放在了新对话中。</string>

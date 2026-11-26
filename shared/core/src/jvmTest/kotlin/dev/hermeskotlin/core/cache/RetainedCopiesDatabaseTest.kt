@@ -79,4 +79,69 @@ class RetainedCopiesDatabaseTest {
             dir.deleteRecursively()
         }
     }
+
+    private suspend fun <T> withCache(dir: java.io.File, at: Long, block: suspend (OfflineCache, OfflineDao) -> T): T {
+        val database = offlineDatabase(dir)
+        try {
+            return block(OfflineCache(database.dao(), KeystoreSealer(keys), EmptyCoroutineContext) { at }, database.dao())
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun copiesStayWithTheirAccountAcrossRestarts(): Unit = runBlocking {
+        val dir = Files.createTempDirectory("owners").toFile()
+        val alice = RetainedCopies.owner("password", "alice")
+        val bob = RetainedCopies.owner("password", "bob")
+        try {
+            withCache(dir, 1_000L) { cache, _ ->
+                assertTrue(cache.bindOwner(home, alice))
+                assertNotNull(cache.saveTranscript(home, null, "c", listOf(row(1, "alice's")), "c"))
+            }
+            // Alice's session expires; Bob signs in after a restart.
+            withCache(dir, 2_000L) { cache, _ ->
+                assertTrue(cache.bindOwner(home, bob))
+                assertNull(cache.savedTranscript(home, null, "c"))
+                assertNotNull(cache.saveTranscript(home, null, "c", listOf(row(7, "bob's")), "c"))
+            }
+            // Bob signs out; Alice signs in after another restart and has hers, not his.
+            withCache(dir, 3_000L) { cache, _ -> assertNotNull(cache.detachGateway(home)) }
+            withCache(dir, 4_000L) { cache, dao ->
+                assertTrue(cache.bindOwner(home, alice))
+                assertEquals(listOf("alice's"), cache.savedTranscript(home, null, "c")?.rows?.map { it.text })
+                assertEquals(1, dao.transcriptGateways().count { RetainedCopies.isDetached(it, home.value) })
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun aCorruptedSealedPieceThenASaveKeepsTheRestAndTheOriginal(): Unit = runBlocking {
+        val dir = Files.createTempDirectory("corrupt").toFile()
+        try {
+            val huge = "z".repeat(OfflineCache.MAX_PIECE_CHARS * 2)
+            val stored = withCache(dir, 1_000L) { cache, dao ->
+                cache.saveTranscript(home, null, "c", listOf(row(1), row(2, huge), row(3)), "c")
+                val transcript = dao.transcript(home.value, "", "c")!!
+                // Flip one byte of the second piece: AES-GCM refuses it.
+                dao.replaceTranscript(transcript, dao.messages(home.value, "", "c").map {
+                    if (it.position != 2) it else SavedMessageRow(it.gateway, it.profile, it.sessionId, it.position,
+                        it.row.copyOf().also { bytes -> bytes[bytes.size / 2] = (bytes[bytes.size / 2] + 1).toByte() })
+                })
+                dao.messages(home.value, "", "c").size
+            }
+            assertTrue(stored > 3, "row 2 is in pieces: $stored")
+            withCache(dir, 2_000L) { cache, dao ->
+                assertNull(cache.savedTranscript(home, null, "c"))
+                assertNotNull(cache.saveTranscript(home, null, "c", listOf(row(4)), "c"))
+                assertEquals(listOf(1L, 3L, 4L), cache.savedTranscript(home, null, "c")?.rows?.map { it.id })
+                val aside = dao.transcriptGateways().single { RetainedCopies.isPutAway(it, home.value) }
+                assertEquals(stored, dao.messages(aside, "", "c").size)
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
 }

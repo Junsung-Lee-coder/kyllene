@@ -147,6 +147,34 @@ interface OfflineDao {
     @Query("SELECT DISTINCT gateway FROM saved_transcript")
     suspend fun transcriptGateways(): List<String>
 
+    /** Every gateway key a saved list is under, detached ones too. */
+    @Query("SELECT DISTINCT gateway FROM saved_list_row")
+    suspend fun listGateways(): List<String>
+
+    @Query("SELECT * FROM saved_transcript WHERE gateway = :gateway")
+    suspend fun transcriptsOf(gateway: String): List<SavedTranscriptRow>
+
+    @Query("SELECT * FROM saved_list_row WHERE gateway = :gateway ORDER BY position")
+    suspend fun listsOf(gateway: String): List<SavedListRow>
+
+    /** Copies a saved chat's rows, unchanged, to the gateway key [to]: kept aside before its readable rows are saved again. */
+    @Transaction
+    suspend fun replaceTranscriptSettingAside(transcript: SavedTranscriptRow, rows: List<SavedMessageRow>, to: String) {
+        val old = transcript(transcript.gateway, transcript.profile, transcript.sessionId)
+        if (old != null) insertTranscript(SavedTranscriptRow(to, old.profile, old.sessionId, old.rowsSessionId, old.savedAt))
+        insertMessages(messages(transcript.gateway, transcript.profile, transcript.sessionId).map {
+            SavedMessageRow(to, it.profile, it.sessionId, it.position, it.row)
+        })
+        replaceTranscript(transcript, rows)
+    }
+
+    /** As [replaceTranscriptSettingAside], for a saved list. */
+    @Transaction
+    suspend fun replaceListSettingAside(gateway: String, profile: String, filter: String, rows: List<SavedListRow>, to: String) {
+        insertList(list(gateway, profile, filter).map { SavedListRow(to, it.profile, it.filter, it.id, it.position, it.savedAt, it.row) })
+        replaceList(gateway, profile, filter, rows)
+    }
+
     @Transaction
     suspend fun moveGateway(from: String, to: String) {
         moveGatewayLists(from, to)

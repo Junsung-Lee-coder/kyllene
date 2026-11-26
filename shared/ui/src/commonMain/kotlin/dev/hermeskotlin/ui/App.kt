@@ -379,6 +379,7 @@ private fun Routes() {
             gateway = r.gateway,
             notice = when (r.notice) {
                 SignInNotice.SessionExpired -> stringResource(Res.string.app_sign_in_again)
+                SignInNotice.SavedChatsNotPutAway -> stringResource(Res.string.app_sign_in_saved_chats_not_put_away)
                 null -> null
             },
             onSignedIn = { app.onSignedIn(r.gateway) },

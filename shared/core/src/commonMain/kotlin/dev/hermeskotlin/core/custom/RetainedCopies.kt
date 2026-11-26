@@ -60,7 +60,32 @@ object RetainedCopies {
     fun isDetached(key: String, gateway: String? = null): Boolean =
         key.startsWith(DETACHED) && (gateway == null || key.endsWith(":$gateway"))
 
+    /**
+     * Where saved rows that no longer read (a damaged piece, a device key that changed) are set aside, whole and
+     * unchanged, when the readable rest is saved again: they aren't deleted, and they don't block the chat.
+     */
+    fun unreadableKey(gateway: String, at: Long, nonce: Long = Random.nextLong()): String = "$UNREADABLE$at:${nonce.toULong()}:$gateway"
+
+    /** Whether [key] holds copies put away from [gateway] (any gateway when null): detached or unreadable ones. */
+    fun isPutAway(key: String, gateway: String? = null): Boolean =
+        (key.startsWith(DETACHED) || key.startsWith(UNREADABLE)) && (gateway == null || key.endsWith(":$gateway"))
+
+    /**
+     * The account copies are kept for, from the gateway's verified session (`GET /api/auth/me`): its provider and
+     * the user id, which is unique within the provider. Null when there's no user id, so no one is assumed.
+     */
+    fun owner(provider: String?, userId: String?): String? =
+        userId?.takeIf { it.isNotBlank() }?.let { "${provider.orEmpty()}\u0000$it" }
+
+    /**
+     * Where a gateway key records its [owner]: a saved "chat" under a profile no gateway profile can be named, so it
+     * moves with the copies when they're detached and no chat read ever finds it. Its one row is the sealed owner.
+     */
+    const val OWNER_PROFILE = "\u0001owner"
+    const val OWNER_SESSION = "owner"
+
     private const val DETACHED = "detached:"
+    private const val UNREADABLE = "unreadable:"
 
     /**
      * A row's text split into pieces short enough for one database row each ([maxChars] UTF-16 units), for a row
@@ -78,6 +103,40 @@ object RetainedCopies {
         }
         return pieces.mapIndexed { index, piece -> "$PART${index + 1}/${pieces.size}\n$piece" }
     }
+
+    /**
+     * [stored] texts in order (null: a row that didn't open), split rows put back together. Rows and whole split
+     * rows that read come back; [Readable.intact] says whether everything did.
+     */
+    fun joinReadable(stored: List<String?>): Readable {
+        val rows = mutableListOf<String>()
+        var intact = true
+        var group = mutableListOf<String?>()
+        fun closeGroup() {
+            if (group.isEmpty()) return
+            val joined = group.takeIf { pieces -> pieces.none { it == null } }?.let { join(it.filterNotNull()) }
+            if (joined == null) intact = false else rows += joined
+            group = mutableListOf()
+        }
+        for (text in stored) {
+            when {
+                text == null -> { closeGroup(); intact = false }
+                text.startsWith(PART) -> {
+                    if (text.startsWith("${PART}1/")) closeGroup()
+                    group += text
+                    val header = text.substring(PART.length, text.indexOf('\n').coerceAtLeast(PART.length))
+                    val (part, of) = header.split('/').map { it.toIntOrNull() }.let { (it.getOrNull(0) ?: -1) to (it.getOrNull(1) ?: -2) }
+                    if (part == of) closeGroup()
+                }
+                else -> { closeGroup(); rows += text }
+            }
+        }
+        closeGroup()
+        return Readable(rows, intact)
+    }
+
+    /** What [joinReadable] read: the [texts] that did, and whether nothing was left out. */
+    data class Readable(val texts: List<String>, val intact: Boolean)
 
     /** [stored] texts in order, with split rows put back together; null when a piece is missing or out of order. */
     fun join(stored: List<String>): List<String>? {

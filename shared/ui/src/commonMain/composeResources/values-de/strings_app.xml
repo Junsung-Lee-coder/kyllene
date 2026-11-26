@@ -78,6 +78,7 @@
     <string name="app_session_expired">Sitzung abgelaufen</string>
     <string name="app_connection_refused">Verbindung abgelehnt</string>
     <string name="app_sign_in_again">Deine Sitzung ist abgelaufen. Melde dich erneut an.</string>
+    <string name="app_sign_in_saved_chats_not_put_away">Die auf diesem Gerät gespeicherten Chats des letzten Kontos konnten nicht weggelegt werden, deshalb wurdest du nicht angemeldet. Versuche es erneut.</string>
     <string name="app_chat_fallback_title">Chat</string>
     <string name="app_untitled_session">Unbenannte Sitzung</string>
     <string name="app_share_bot_gone">Der Chat von %1$s ließ sich nicht öffnen, daher ist das Geteilte in einem neuen Chat.</string>

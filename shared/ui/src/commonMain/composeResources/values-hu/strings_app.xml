@@ -78,6 +78,7 @@
     <string name="app_session_expired">Lejárt a munkamenet</string>
     <string name="app_connection_refused">A kapcsolat elutasítva</string>
     <string name="app_sign_in_again">A munkameneted lejárt. Jelentkezz be újra.</string>
+    <string name="app_sign_in_saved_chats_not_put_away">Az előző fiók ezen az eszközön mentett csevegéseit nem sikerült félretenni, ezért nem jelentkeztél be. Próbáld újra.</string>
     <string name="app_chat_fallback_title">Csevegés</string>
     <string name="app_untitled_session">Névtelen munkamenet</string>
     <string name="app_share_bot_gone">%1$s csevegése nem nyílt meg, ezért a megosztás új csevegésbe került.</string>

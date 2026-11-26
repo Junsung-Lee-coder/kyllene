@@ -78,6 +78,7 @@
     <string name="app_session_expired">Sessão expirada</string>
     <string name="app_connection_refused">Conexão recusada</string>
     <string name="app_sign_in_again">Sua sessão expirou. Entre de novo.</string>
+    <string name="app_sign_in_saved_chats_not_put_away">Não foi possível guardar à parte as conversas salvas neste dispositivo da última conta, então você não entrou. Tente de novo.</string>
     <string name="app_chat_fallback_title">Conversa</string>
     <string name="app_untitled_session">Sessão sem título</string>
     <string name="app_share_bot_gone">Não foi possível abrir a conversa de %1$s, então o compartilhamento está em uma nova conversa.</string>

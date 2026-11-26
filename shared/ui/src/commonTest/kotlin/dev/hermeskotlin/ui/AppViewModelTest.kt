@@ -9,6 +9,7 @@ import dev.hermeskotlin.core.chat.ComposeDraft
 import dev.hermeskotlin.ui.chat.ChatTarget
 import dev.hermeskotlin.ui.inbox.ReportChat
 import dev.hermeskotlin.core.cache.InMemoryOfflineDao
+import dev.hermeskotlin.core.cache.OfflineDao
 import dev.hermeskotlin.core.cache.OfflineCache
 import dev.hermeskotlin.core.cache.PlainSealer
 import dev.hermeskotlin.core.custom.RetainedCopies
@@ -46,6 +47,7 @@ import dev.hermeskotlin.core.storage.KeyValueStore
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockEngineConfig
 import io.ktor.client.engine.mock.respond
+import dev.hermeskotlin.core.sessions.SessionMessage
 import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Url
@@ -59,6 +61,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.TestScope
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -103,7 +106,17 @@ class AppViewModelTest {
     private val lastChats = LastChatStore(store)
     private val access = AccessTokens(store)
     private val offlineDao = InMemoryOfflineDao()
-    private val cache = OfflineCache(offlineDao, PlainSealer, EmptyCoroutineContext) { 0L }
+
+    /** Fork: moving copies away fails while this is set, as on a full disk. */
+    private var failMoves = false
+    private val cacheDao = object : OfflineDao by offlineDao {
+        override suspend fun moveGateway(from: String, to: String) =
+            if (failMoves) throw IllegalStateException("disk full") else offlineDao.moveGateway(from, to)
+    }
+    private val cache = OfflineCache(cacheDao, PlainSealer, EmptyCoroutineContext) { 0L }
+
+    /** Fork: the account `GET /api/auth/me` says the session is for (`user_id`); null answers 503. */
+    private var signedInAs: String? = null
 
     // The connection waits on its ticket for good (a retry loop would keep the test clock busy, so a missed
     // route would hang instead of time out); every other call fails, and sign-out still wipes cookies.
@@ -116,6 +129,9 @@ class AppViewModelTest {
                     if (request.url.encodedPath.endsWith("ws-ticket")) {
                         if (botTransport == null) awaitCancellation()
                         return@addHandler respond("""{"ticket":"T","ttl_seconds":30}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                    }
+                    if (request.url.encodedPath == "/api/auth/me" && signedInAs != null) {
+                        return@addHandler respond("""{"user_id":"$signedInAs","provider":"password"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
                     }
                     if (request.url.encodedPath == "/api/sessions/s1/messages") {
                         sessionGate?.await()
@@ -823,6 +839,109 @@ class AppViewModelTest {
         // Fork: kept on the device, under a key no gateway reads (OfflineCache.detachGateway).
         val keys = offlineDao.gatewayKeys() - other.gatewayUrl.value
         assertTrue(keys.isNotEmpty() && keys.all { RetainedCopies.isDetached(it, home.gatewayUrl.value) }, "$keys")
+    }
+
+    // Fork: saved chats belong to the account verified at sign-in (OfflineCache.bindOwner).
+
+    private suspend fun saveChat(text: String) =
+        cache.saveTranscript(home.gatewayUrl, null, "c", listOf(SessionMessage(id = 1, role = "user", content = JsonPrimitive(text))), "c")
+
+    private suspend fun savedChat() = cache.savedTranscript(home.gatewayUrl, null, "c")?.rows?.map { it.text }
+
+    private suspend fun TestScope.signedInTo(vm: AppViewModel, account: String) {
+        signedInAs = account
+        vm.onSignedIn(home)
+        vm.route.first { it is Route.Chat }
+    }
+
+    @Test
+    fun anotherAccountSigningInAfterExpiryDoesntSeeTheFirstAccountsChats() = runTest {
+        gateways.save(home)
+        val vm = viewModel()
+        signedInTo(vm, "alice")
+        saveChat("alice's")
+        vm.onSessionExpired()
+        assertEquals(SignInNotice.SessionExpired, assertIs<Route.SignIn>(vm.route.value).notice)
+
+        signedInTo(vm, "bob")
+
+        assertNull(savedChat())
+        assertNull(cache.savedList(home.gatewayUrl, null, SessionListFilter.Recent))
+        // Kept on the device, and Alice's again once she signs in.
+        vm.onSessionExpired()
+        signedInTo(vm, "alice")
+        assertEquals(listOf("alice's"), savedChat())
+    }
+
+    @Test
+    fun theSameAccountSigningInAfterExpiryKeepsItsChats() = runTest {
+        gateways.save(home)
+        val vm = viewModel()
+        signedInTo(vm, "alice")
+        saveChat("alice's")
+        vm.onSessionExpired()
+
+        signedInTo(vm, "alice")
+
+        assertEquals(listOf("alice's"), savedChat())
+        assertTrue(offlineDao.gatewayKeys().none { RetainedCopies.isPutAway(it) })
+    }
+
+    @Test
+    fun signingOutAndBackInGetsTheAccountsChatsBack() = runTest {
+        gateways.save(home)
+        cookies.addCookie(Url(home.url), Cookie("session", "test"))
+        val vm = viewModel()
+        signedInTo(vm, "alice")
+        saveChat("alice's")
+
+        vm.signOut()
+        vm.awaitSignIn(home)
+        assertNull(savedChat())
+
+        signedInTo(vm, "alice")
+        assertEquals(listOf("alice's"), savedChat())
+        assertTrue(offlineDao.gatewayKeys().none { RetainedCopies.isPutAway(it) })
+    }
+
+    @Test
+    fun chatsSavedForNoKnownAccountArePutAwayNotDeleted() = runTest {
+        gateways.save(home)
+        saveChat("from before owners were kept")
+        val vm = viewModel()
+
+        signedInTo(vm, "alice")
+
+        assertNull(savedChat())
+        val putAway = offlineDao.gatewayKeys().single { RetainedCopies.isPutAway(it, home.gatewayUrl.value) }
+        assertEquals(1, offlineDao.messages(putAway, "", "c").size)
+        // Still Alice's to delete on purpose; nothing is handed to her.
+        assertNotNull(cache.forgetPutAway(home.gatewayUrl))
+        assertTrue(offlineDao.gatewayKeys().none { RetainedCopies.isPutAway(it) })
+    }
+
+    @Test
+    fun aSignInThatCantPutTheLastAccountsChatsAwayDoesntGoOn() = runTest {
+        gateways.save(home)
+        val vm = viewModel()
+        signedInTo(vm, "alice")
+        saveChat("alice's")
+        vm.onSessionExpired()
+        failMoves = true
+        cookies.addCookie(Url(home.url), Cookie("session", "bob"))
+
+        signedInAs = "bob"
+        vm.onSignedIn(home)
+
+        val route = vm.route.first { it is Route.SignIn && it.notice == SignInNotice.SavedChatsNotPutAway }
+        assertEquals(home.url, assertIs<Route.SignIn>(route).gateway.url)
+        assertFalse(auth.hasStoredSession(home.gatewayUrl))
+        // Alice's chats weren't moved, and no one is signed in to read them.
+        assertEquals(listOf("alice's"), savedChat())
+
+        failMoves = false
+        signedInTo(vm, "bob")
+        assertNull(savedChat())
     }
 
     @Test

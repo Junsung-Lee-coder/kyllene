@@ -234,6 +234,22 @@ class SessionsViewModelTest {
     }
 
     @Test
+    fun deletingAChatTheGatewayNoLongerHasDropsItsSavedCopy() = runTest(dispatcher) {
+        // Fork: the copy of a chat the gateway lost is kept (RetainedCopies), so deleting it must still drop it.
+        val cache = OfflineCache(InMemoryOfflineDao(), PlainSealer, EmptyCoroutineContext) { 7_000L }
+        val vm = viewModel(deleteStatus = HttpStatusCode.NotFound, cache = cache)
+        vm.bind(gateway)
+        cache.saveTranscript(gateway.gatewayUrl, null, "b", listOf(SessionMessage(id = 1, role = "user")), "b")
+
+        vm.delete(vm.state.value.sessions.first { it.id == "b" })
+
+        assertEquals(null, cache.savedTranscript(gateway.gatewayUrl, null, "b"))
+        assertEquals(listOf("a"), cache.savedList(gateway.gatewayUrl, null, SessionListFilter.Recent)?.sessions?.map { it.id })
+        assertEquals(listOf("a"), vm.state.value.sessions.map { it.id })
+        assertEquals(null, vm.state.value.message)
+    }
+
+    @Test
     fun deletingAChatDropsItsSavedCopy() = runTest(dispatcher) {
         val cache = OfflineCache(InMemoryOfflineDao(), PlainSealer, EmptyCoroutineContext) { 7_000L }
         val vm = viewModel(cache = cache)

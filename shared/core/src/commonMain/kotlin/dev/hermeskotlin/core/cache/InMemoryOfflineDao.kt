@@ -96,6 +96,12 @@ class InMemoryOfflineDao : OfflineDao {
 
     override suspend fun transcriptGateways() = mutex.withLock { transcripts.map { it.gateway }.distinct() }
 
+    override suspend fun listGateways() = mutex.withLock { lists.map { it.gateway }.distinct() }
+
+    override suspend fun transcriptsOf(gateway: String) = mutex.withLock { transcripts.filter { it.gateway == gateway } }
+
+    override suspend fun listsOf(gateway: String) = mutex.withLock { lists.filter { it.gateway == gateway }.sortedBy { it.position } }
+
     private fun <T> MutableList<T>.update(change: (T) -> T) {
         for (index in indices) this[index] = change(this[index])
     }
