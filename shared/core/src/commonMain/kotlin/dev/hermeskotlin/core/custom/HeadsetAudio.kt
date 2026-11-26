@@ -47,6 +47,41 @@ object HeadsetAudio {
      */
     fun headsetLost(was: Route, now: Ports): Boolean = was == Route.Headset && !now.headsetWithMic
 
+    /** Where a live call's audio goes. */
+    enum class LiveOutput {
+        /** Call routing to a headset Android can make a call through: its microphone in, its speaker out (stock). */
+        Headset,
+        /**
+         * Earphones Android can't make a call through (music-only Bluetooth earbuds, a hearing aid, a USB DAC): no call
+         * routing, so the call's voice plays as media, where Android plays media, in them; the phone's microphone
+         * listens, and the chat says so. Never the phone's speaker.
+         */
+        Earphones,
+        /** Nothing private connected: call routing on the phone's speaker (stock). */
+        Speaker,
+    }
+
+    /**
+     * Fork: a live call's output. Headphones come first (requirements: earphones take spoken output): a headset the
+     * call can be routed to ([callHeadset], as the call picks one), else any other private output, and only then the
+     * phone's speaker. Stock sent everything but a call headset to the speaker.
+     */
+    fun liveOutput(callHeadset: Boolean, ports: Ports): LiveOutput = when {
+        callHeadset -> LiveOutput.Headset
+        ports.privateOutput -> LiveOutput.Earphones
+        else -> LiveOutput.Speaker
+    }
+
+    /**
+     * Fork: the output a live call was put on has gone ([callHeadset] and [ports] as they are now): it hangs up, silent,
+     * rather than going on from the phone's speaker. A call on the speaker has nothing to lose.
+     */
+    fun liveLost(output: LiveOutput, callHeadset: Boolean, ports: Ports): Boolean = when (output) {
+        LiveOutput.Headset -> !callHeadset
+        LiveOutput.Earphones -> !ports.privateOutput
+        LiveOutput.Speaker -> false
+    }
+
     /** What the player does next for the chained chats open, as [Tracker] decides it. */
     sealed interface Step {
         /** Route the chats this way. */

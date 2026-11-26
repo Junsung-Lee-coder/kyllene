@@ -357,6 +357,41 @@ class PhoneVoiceControlsTest {
         }
     }
 
+    /** Fork: a live call with music-only earbuds plays in them (AndroidLiveCall's route); the panel says the phone listens. */
+    @Test
+    fun aLiveCallSaysWhenTheEarphonesMicrophoneCantBeUsed() = runTest {
+        for (micUnavailable in listOf(true, false)) {
+            val client = createHttpClient(
+                MockEngine { request ->
+                    when (request.url.encodedPath) {
+                        "/api/auth/ws-ticket" -> respond("""{"ticket":"T","ttl_seconds":30}""", HttpStatusCode.OK, json)
+                        "/api/audio/voice-live/status" -> respond("""{"ok":true,"mode":"gpt-live","available":true,"reason":null,"model":"gpt-live-1","voice":"marin"}""", HttpStatusCode.OK, json)
+                        "/api/audio/voice-live/session" -> respond("""{"ok":true,"session":{"id":"live-1"},"transport":{"type":"webrtc","sdp":"v=0 answer\r\n"}}""", HttpStatusCode.OK, json)
+                        else -> respond("""{"ok":true}""", HttpStatusCode.OK, json)
+                    }
+                },
+                PersistentCookiesStorage(InMemoryKeyValueStore()),
+            )
+            val connection = GatewayConnection(AuthApi(client, PersistentCookiesStorage(InMemoryKeyValueStore())), { _, _ -> Socket() }, backgroundScope)
+            connection.start(gateway)
+            connection.state.first { it is ConnectionState.Connected }
+            val session = ChatSession(gateway, null, null, connection, SessionsApi(client), backgroundScope)
+            session.start()
+            val call = FakeCall()
+            val player = EarphonePlayer(micUnavailable = micUnavailable)
+            val voice = VoiceController(AudioApi(client), QuietRecorder(), player, backgroundScope, backgroundScope) { call }
+            voice.startChat(session, gateway, null, mode = VoiceMode.Live)
+            val on = voice.chat.first { it.live && it.phase == VoicePhase.Listening }
+            if (micUnavailable) assertTrue(on.error != null, "the panel didn't say the phone's microphone listens")
+            else assertNull(on.error)
+            // Still a live call, not the chained chat.
+            assertTrue(player.asked.isEmpty())
+            voice.stopChat()
+            voice.chat.first { it.phase == VoicePhase.Off }
+            assertTrue(call.closed)
+        }
+    }
+
     @Test
     fun aPressEndsALiveCall() = runTest {
         val client = createHttpClient(

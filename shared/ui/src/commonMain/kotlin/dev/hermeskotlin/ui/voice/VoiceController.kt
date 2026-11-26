@@ -550,7 +550,12 @@ class VoiceController(
         val status = audio.voiceLiveStatus(gateway, profile)
         if (status !is ApiResult.Success || !status.value.live) return false
         val call = calls.create() ?: return false
-        _chat.value = VoiceChatState(VoicePhase.Connecting, live = true)
+        // Fork: earphones the call can't talk through (music-only earbuds) still play it; the phone's microphone
+        // listens, which the panel says (AndroidLiveCall's route).
+        val micNotice = if (player.headsetMicUnavailable()) {
+            runCatching { getString(Res.string.voice_error_headset_mic_unavailable) }.getOrNull() ?: HEADSET_MIC_UNAVAILABLE
+        } else null
+        _chat.value = VoiceChatState(VoicePhase.Connecting, live = true, error = micNotice)
         val conversation = LiveConversation(call, session, _chat, deviceLock, opener?.liveOpener(), onConnectionResult)
         live = conversation
         var error: String? = null

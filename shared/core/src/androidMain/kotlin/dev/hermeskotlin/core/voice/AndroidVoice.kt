@@ -395,19 +395,7 @@ class AndroidSpeechPlayer(
     override fun headsetMicUnavailable(): Boolean = synchronized(lock) { HeadsetAudio.micUnavailable(ports()) }
 
     /** Fork: what's connected, as [HeadsetAudio] reads it. */
-    @SuppressLint("InlinedApi") // A device only reports the types its Android knows.
-    private fun ports(): HeadsetAudio.Ports {
-        val outputs = runCatching { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).map { it.type } }.getOrDefault(emptyList())
-        // Before Android 12 there's no communication device to pick: a Bluetooth headset's microphone isn't reachable.
-        val talkable = if (Build.VERSION.SDK_INT >= 31) {
-            runCatching { audioManager.availableCommunicationDevices.map { it.type } }.getOrDefault(emptyList())
-        } else emptyList()
-        return HeadsetAudio.Ports(
-            headsetWithMic = talkable.any { it in HEADSETS_WITH_MIC },
-            privateOutput = outputs.any { it in OWN_OUTPUTS },
-            earphonesWithoutUsableMic = outputs.any { it in EARPHONES },
-        )
-    }
+    private fun ports(): HeadsetAudio.Ports = HeadsetPorts.of(audioManager)
 
     /** Call routing while a chained chat is open on the phone's own speaker, the usual route otherwise. */
     @Suppress("DEPRECATION")
@@ -487,7 +475,7 @@ class AndroidSpeechPlayer(
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         if (Build.VERSION.SDK_INT >= 31) {
             val devices = audioManager.availableCommunicationDevices
-            val device = if (to == HeadsetAudio.Route.Headset) devices.firstOrNull { it.type in HEADSETS_WITH_MIC }
+            val device = if (to == HeadsetAudio.Route.Headset) devices.firstOrNull { it.type in HeadsetPorts.HEADSETS_WITH_MIC }
                 else devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
             return device != null && audioManager.setCommunicationDevice(device)
         }
@@ -699,33 +687,6 @@ class AndroidSpeechPlayer(
         const val DRAIN_SLACK_MS = 400L
         /** How often the drain looks whether it's held. */
         const val DRAIN_STEP_MS = 50L
-
-        /** Outputs that aren't the phone itself: with one in, a chained chat leaves the route alone. */
-        @SuppressLint("InlinedApi") // A device only reports the types its Android knows.
-        val OWN_OUTPUTS = setOf(
-            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_LINE_ANALOG,
-            AudioDeviceInfo.TYPE_LINE_DIGITAL, AudioDeviceInfo.TYPE_AUX_LINE, AudioDeviceInfo.TYPE_HDMI,
-            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_ACCESSORY, AudioDeviceInfo.TYPE_USB_HEADSET,
-            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_HEARING_AID,
-            AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER, AudioDeviceInfo.TYPE_BLE_BROADCAST,
-        )
-
-        /** Fork: communication devices with a microphone a chat can talk through, as a live call picks them. */
-        @SuppressLint("InlinedApi")
-        val HEADSETS_WITH_MIC = setOf(
-            AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET,
-            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_USB_HEADSET,
-        )
-
-        /**
-         * Fork: outputs that are earphones, whose microphone the chat should use. A wired or USB headset isn't among
-         * them: its microphone is the phone's usual input anyway.
-         */
-        @SuppressLint("InlinedApi")
-        val EARPHONES = setOf(
-            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET,
-            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_HEARING_AID,
-        )
     }
 }
 

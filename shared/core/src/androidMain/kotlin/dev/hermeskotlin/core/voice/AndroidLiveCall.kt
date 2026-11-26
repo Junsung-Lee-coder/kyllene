@@ -1,12 +1,6 @@
 package dev.hermeskotlin.core.voice
 
 import android.content.Context
-import android.media.AudioDeviceCallback
-import android.media.AudioDeviceInfo
-import android.media.AudioManager
-import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -35,7 +29,6 @@ import kotlin.math.sqrt
  * data channel. Desktop's VoiceLiveSession, on Android.
  */
 class AndroidLiveCall(context: Context) : LiveCall {
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val appContext = context.applicationContext
     private val incoming = Channel<String>(Channel.UNLIMITED)
     override val events: ReceiveChannel<String> = incoming
@@ -46,28 +39,19 @@ class AndroidLiveCall(context: Context) : LiveCall {
     private var channel: DataChannel? = null
     private var audioTrack: org.webrtc.AudioTrack? = null
     private var audioSource: org.webrtc.AudioSource? = null
-    private var previousMode = AudioManager.MODE_NORMAL
-    private var routed = false
-
     /**
-     * Fork: the call went to earphones. If they go away it hangs up, silent, rather than going on from the phone (a
-     * lost headset stops speech); the call's events end, as for a call that dropped.
+     * Fork: headphones first ([LiveAudioRoute]): a call headset, else other earphones (played as media), else the
+     * speaker. If what it went to goes away, it hangs up, silent, rather than going on from the phone (a lost headset
+     * stops speech); the call's events end, as for a call that dropped.
      */
-    private var onHeadset = false
-    private val headsetWatch = object : AudioDeviceCallback() {
-        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
-            if (onHeadset && !closed && !headsetIn()) {
-                runCatching { audioTrack?.setEnabled(false) }
-                runCatching { adm?.setSpeakerMute(true) }
-                close()
-            }
-        }
-    }
+    private val route = LiveAudioRoute(context)
 
-    @Suppress("DEPRECATION")
-    private fun headsetIn(): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        audioManager.availableCommunicationDevices.any { it.type in HEADSETS }
-    } else audioManager.isWiredHeadsetOn || audioManager.isBluetoothScoOn
+    private fun outputLost() {
+        if (closed) return
+        runCatching { audioTrack?.setEnabled(false) }
+        runCatching { adm?.setSpeakerMute(true) }
+        close()
+    }
 
     @Volatile private var closed = false
     @Volatile private var micLevel = 0f
@@ -76,10 +60,12 @@ class AndroidLiveCall(context: Context) : LiveCall {
 
     override suspend fun connect(answer: suspend (offerSdp: String) -> String) {
         initialize(appContext)
-        routeAudio()
+        route.route(::outputLost)
         // WebRTC's own echo canceller rather than the phone's: with the voice on the speaker, many phones'
         // cancellers go half-duplex and all but mute the microphone while it talks, so you can't cut in.
         val adm = JavaAudioDeviceModule.builder(appContext)
+            // Fork: on earphones that take no call, the voice plays as media, which goes to them.
+            .apply { route.playout()?.let(::setAudioAttributes) }
             .setUseHardwareAcousticEchoCanceler(false)
             .setUseHardwareNoiseSuppressor(false)
             .setSamplesReadyCallback { samples -> micLevel = level(samples.data) }
@@ -199,43 +185,13 @@ class AndroidLiveCall(context: Context) : LiveCall {
         unrouteAudio()
     }
 
-    /** A call goes to the speaker (or the headset when one is in), with the phone's call processing. */
-    @Suppress("DEPRECATION")
-    private fun routeAudio() {
-        previousMode = audioManager.mode
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        routed = true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val devices = audioManager.availableCommunicationDevices
-            val headset = devices.firstOrNull { it.type in HEADSETS }
-            (headset ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER })?.let(audioManager::setCommunicationDevice)
-            onHeadset = headset != null
-        } else {
-            audioManager.isSpeakerphoneOn = !audioManager.isWiredHeadsetOn && !audioManager.isBluetoothScoOn
-            onHeadset = !audioManager.isSpeakerphoneOn
-        }
-        if (onHeadset) runCatching { audioManager.registerAudioDeviceCallback(headsetWatch, Handler(Looper.getMainLooper())) }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun unrouteAudio() {
-        if (!routed) return
-        routed = false
-        if (onHeadset) runCatching { audioManager.unregisterAudioDeviceCallback(headsetWatch) }
-        onHeadset = false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) audioManager.clearCommunicationDevice()
-        else audioManager.isSpeakerphoneOn = false
-        audioManager.mode = previousMode
-    }
+    /** The call's routing goes back as it was. */
+    private fun unrouteAudio() = route.unroute()
 
     private companion object {
         const val ICE_GATHER_MS = 10_000L
         const val SPEAKING_LEVEL = 0.02
         const val SPEAKING_HANGOVER_MS = 400L
-        val HEADSETS = setOf(
-            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_USB_HEADSET,
-            AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET,
-        )
 
         @Volatile private var initialized = false
 

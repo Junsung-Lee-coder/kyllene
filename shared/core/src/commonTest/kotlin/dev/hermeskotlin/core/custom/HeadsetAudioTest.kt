@@ -1,6 +1,7 @@
 package dev.hermeskotlin.core.custom
 
 import dev.hermeskotlin.core.custom.HeadsetAudio.Ports
+import dev.hermeskotlin.core.custom.HeadsetAudio.LiveOutput
 import dev.hermeskotlin.core.custom.HeadsetAudio.Route
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -117,5 +118,31 @@ class HeadsetAudioTest {
         assertEquals(null, tracker.becomingNoisy(open = true))
         // The device change that follows doesn't move it anywhere either.
         assertEquals(use(Route.Usual), tracker.step(open = true, talkOver = true, phoneOnly))
+    }
+
+    /** Live: headphones first. Stock put everything but a call headset on the phone's speaker. */
+    @Test
+    fun aLiveCallTakesAnyHeadphonesBeforeThePhonesSpeaker() {
+        assertEquals(LiveOutput.Headset, HeadsetAudio.liveOutput(callHeadset = true, bluetoothHeadset))
+        // Music-only earbuds, and other private outputs, play the call rather than the speaker.
+        assertEquals(LiveOutput.Earphones, HeadsetAudio.liveOutput(callHeadset = false, musicOnlyEarbuds))
+        assertEquals(LiveOutput.Earphones, HeadsetAudio.liveOutput(callHeadset = false, carSpeaker))
+        // A call headset wins over other outputs connected with it.
+        assertEquals(LiveOutput.Headset, HeadsetAudio.liveOutput(callHeadset = true, musicOnlyEarbuds))
+        assertEquals(LiveOutput.Speaker, HeadsetAudio.liveOutput(callHeadset = false, phoneOnly))
+    }
+
+    @Test
+    fun aLiveCallHangsUpWhenWhatItPlaysThroughGoes() {
+        // Earphones gone: lost, never on to the speaker.
+        assertTrue(HeadsetAudio.liveLost(LiveOutput.Earphones, callHeadset = false, phoneOnly))
+        assertFalse(HeadsetAudio.liveLost(LiveOutput.Earphones, callHeadset = false, musicOnlyEarbuds))
+        // One of two outputs gone, another private one left: not lost.
+        assertFalse(HeadsetAudio.liveLost(LiveOutput.Earphones, callHeadset = false, carSpeaker))
+        // The call headset gone, as before, even with music-only earbuds left.
+        assertTrue(HeadsetAudio.liveLost(LiveOutput.Headset, callHeadset = false, musicOnlyEarbuds))
+        assertFalse(HeadsetAudio.liveLost(LiveOutput.Headset, callHeadset = true, bluetoothHeadset))
+        // On the speaker, nothing to lose.
+        assertFalse(HeadsetAudio.liveLost(LiveOutput.Speaker, callHeadset = false, phoneOnly))
     }
 }
