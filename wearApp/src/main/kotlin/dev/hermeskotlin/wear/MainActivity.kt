@@ -18,6 +18,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -32,6 +35,18 @@ data class Listening(
     val error: WatchLine? = null,
     val waiting: Boolean = false,
 )
+
+/**
+ * Fork (requirements §3.2): the screen stays on while a live call runs or Talk records on this screen, and goes back
+ * to timing out once neither does. Out of sight, [MainActivity.onStop] still ends both; the flag only holds while the
+ * window shows ([WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON]).
+ */
+internal fun ComponentActivity.keepScreenOnWhile(call: Flow<WatchCallState?>, listening: Flow<Listening>): Job = lifecycleScope.launch {
+    combine(call, listening) { c, l -> c?.active == true || l.recording }.distinctUntilChanged().collect { on ->
+        if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+}
 
 /**
  * The talk screen. A tap on the mic records one request here until it's sent (the orb, Done talking) or dropped
@@ -105,13 +120,8 @@ class MainActivity : ComponentActivity() {
         }
         // Fork: the wake word doesn't listen while this screen records.
         lifecycleScope.launch { listening.collect { app.wake.appRecording.value = it.recording } }
-        // A call keeps the screen on: with it off, the activity stops, and the call with it.
-        lifecycleScope.launch {
-            app.link.call.collect { call ->
-                if (call?.active == true) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-        }
+        // A call, or Talk recording here, keeps the screen on: with it off, the activity stops, and either with it.
+        keepScreenOnWhile(app.link.call, listening)
         if (savedInstanceState == null) {
             handle(intent)
             // Hermes rings the watch when it needs an answer, which takes notifications. Asked once; a no stays a no.

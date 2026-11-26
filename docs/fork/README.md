@@ -185,13 +185,16 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
        and is deleted once sent or dropped, so a long one takes no more of the watch's memory than a short one. The
        phone reads it as it arrives, with no size limit, and holds it as it holds its own Talk recording for the
        gateway to transcribe.
+     - The talk screen stays on while it records, as it does for a live call, and times out again once it's sent or
+       dropped; leaving the screen still drops it.
      - A request the wake word started still ends on the wake setting's quiet spell (item 11).
      - Code: `wearApp/.../WatchRecorder.kt` (`Endpoint.TALK`, the file), `RecordAsk.kt`, `WatchLink.ask`,
        `MainActivity.listen`, `HeraldWearAssistSession`, `WatchWake`, the phone's `WearBridgeService`, and
        `wearlink/.../RecordedAskStream.kt` (`writeRecordedAsk`, `readRecordedAsk`) with `RecordedAsk.headerSize`/`header`.
      - Tests: `wearApp/.../WatchTalkRecordingTest.kt` (the real recorder on simulated sound through `recordAsk`: quiet
        past the old 1.25 s, over 60 s, a quiet send, an empty send, a cancel, and the wake word's ending unchanged),
-       `RecordAskTest`, and `wearlink/.../RecordedAskStreamTest.kt` (the watch's stream read back by the phone's
+       `RecordAskTest`, `TalkKeepsScreenOnTest` (the window's keep-screen-on flag while Talk records through
+       `recordAsk`, after Send, after leaving, and with a live call), and `wearlink/.../RecordedAskStreamTest.kt` (the watch's stream read back by the phone's
        reader, as `RecordedAsk.write` makes it).
    - Code: `ui/voice/ManualTalk.kt` (the modes), `VoiceController` (`converseManual`, `awaitTalk`, `talk`, `end`,
      `onForeground`, the Live-or-reason start, and `VoicePhase.Ready`), `VoiceButton` (Ready records), the voice
