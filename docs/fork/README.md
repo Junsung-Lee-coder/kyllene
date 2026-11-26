@@ -41,7 +41,14 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
        in again;
      - if the copies can't be detached, the sign-in doesn't go on: the new session is signed out again and the
        sign-in screen says why;
-     - a session kept from before is checked the same way once the gateway answers;
+     - which account each gateway's stored session was confirmed to be is kept on disk
+       (`custom/SessionBindings.kt`). A new sign-in marks it pending before its credentials are stored, and only a
+       finished bind records the account; renewing tokens leaves it alone, and signing out clears it;
+     - every start of a kept session, offline too, gives the saved chats to the recorded account before anything
+       reads them. With none recorded (a sign-in that didn't finish, or a session from before this), they're all put
+       away until the gateway says whose they are. Once online, a session the gateway says is another account's is
+       rebound the same way; wherever another account's chats can't be put away, the session is signed out with
+       the same notice;
    - sets aside a saved row, piece or list entry that no longer reads (under an `unreadable:` key, unchanged), and
      saves the readable rest; it never drops the readable rows with it;
    - shows a copy that couldn't be written with the chat's existing error banner, or the list's existing message.
@@ -107,7 +114,9 @@ For each conflict or failing test:
   one the gateway answers 404 for) or a bot. A 404 on reading must not delete anything. Signing out and removing a
   gateway must call `detachGateway`.
 - **Sign-in.** Every path that finishes a sign-in must call `bindOwner` before anything reads the cache, and must not
-  go on when it returns false. If upstream changes `/api/auth/me` or how accounts are named, keep the owner as
+  go on when it returns false. Every path that starts a kept session (`AppViewModel` `init` and `open`) must call
+  `keptSessionCache` before routing to a chat. Any new way of storing a new account's credentials must go through
+  `AuthApi.newCredentials`, so the binding is marked pending first. If upstream changes `/api/auth/me` or how accounts are named, keep the owner as
   provider and user id.
 - **The database.** If upstream bumps the cache database version, add a real migration or the copies are wiped. Keep
   the fork's DAO queries.
