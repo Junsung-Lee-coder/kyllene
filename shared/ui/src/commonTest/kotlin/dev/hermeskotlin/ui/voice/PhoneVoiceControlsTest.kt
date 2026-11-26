@@ -5,6 +5,7 @@ import dev.hermeskotlin.core.auth.PersistentCookiesStorage
 import dev.hermeskotlin.core.chat.ChatSession
 import dev.hermeskotlin.core.connection.ConnectionState
 import dev.hermeskotlin.core.connection.GatewayConnection
+import dev.hermeskotlin.core.custom.HeadsetAudio
 import dev.hermeskotlin.core.gateway.GatewayUrl
 import dev.hermeskotlin.core.network.createHttpClient
 import dev.hermeskotlin.core.rpc.RpcTransport
@@ -92,10 +93,10 @@ class PhoneVoiceControlsTest {
     }
 
     /** The gateway: talk-over off, transcribes "hello", and never answers a reply's speech (Read aloud stays on). */
-    private fun audio() = AudioApi(createHttpClient(
+    private fun audio(talkOver: Boolean = false) = AudioApi(createHttpClient(
         MockEngine { request ->
             when (request.url.encodedPath) {
-                "/api/config" -> respond("""{"voice":{"barge_in":false}}""", HttpStatusCode.OK, json)
+                "/api/config" -> respond("""{"voice":{"barge_in":$talkOver}}""", HttpStatusCode.OK, json)
                 "/api/audio/transcribe" -> respond("""{"ok":true,"transcript":"hello"}""", HttpStatusCode.OK, json)
                 "/api/audio/tts-lease" -> respond("""{"ok":true}""", HttpStatusCode.OK, json)
                 else -> awaitCancellation()
@@ -212,6 +213,63 @@ class PhoneVoiceControlsTest {
         assertTrue(ended.error.orEmpty().isNotEmpty(), "the chat says why it ended")
         // The close action is safe to call again, and the chat may (End and its own end): closed at least once.
         assertTrue(player.closed >= 1)
+    }
+
+    /**
+     * The Android player's policy, without Android: the real [HeadsetAudio.Tracker] decides every route and loss, as
+     * `AndroidSpeechPlayer` runs it. It records the routes it would take and whether it stopped what played.
+     */
+    private class TrackedPlayer(private var ports: HeadsetAudio.Ports) : SpeechPlayer {
+        private val tracker = HeadsetAudio.Tracker()
+        private val open = mutableMapOf<Any, Pair<Boolean, () -> Unit>>()
+        val routes = mutableListOf<HeadsetAudio.Route>()
+        var stopped = 0
+        override suspend fun play(audio: SpokenAudio) = Unit
+        override fun chainedChatAudio(talkOver: Boolean, onHeadsetLost: () -> Unit): () -> Unit {
+            val owner = Any()
+            open[owner] = talkOver to onHeadsetLost
+            reroute()
+            return { if (open.remove(owner) != null) reroute() }
+        }
+
+        /** The phone's outputs are now [now]: the device callback. */
+        fun outputs(now: HeadsetAudio.Ports) {
+            ports = now
+            reroute()
+        }
+
+        private fun reroute() {
+            when (val step = tracker.change(open.isNotEmpty(), open.values.any { it.first }, ports)) {
+                HeadsetAudio.Step.Silence -> {
+                    stopped++
+                    tracker.held(HeadsetAudio.Route.Usual)
+                    open.values.toList().forEach { it.second() }
+                }
+                is HeadsetAudio.Step.Use -> {
+                    routes += step.route
+                    tracker.held(step.route)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun musicOnlyEarbudsGoneMidChatEndItInsteadOfMovingToTheSpeaker() = runTest {
+        val earbuds = HeadsetAudio.Ports(headsetWithMic = false, privateOutput = true, earphonesWithoutUsableMic = true)
+        val phoneOnly = HeadsetAudio.Ports(headsetWithMic = false, privateOutput = false, earphonesWithoutUsableMic = false)
+        val player = TrackedPlayer(earbuds)
+        // Talk-over on: stock would move this chat to speaker call routing once the earbuds go.
+        val voice = VoiceController(audio(talkOver = true), QuietRecorder(), player, backgroundScope, backgroundScope)
+        voice.startChat(offlineSession(), gateway, null)
+        voice.chat.first { it.phase == VoicePhase.Listening }
+        assertEquals(listOf(HeadsetAudio.Route.Usual), player.routes)
+
+        player.outputs(phoneOnly)
+
+        val ended = voice.chat.first { it.phase == VoicePhase.Off }
+        assertTrue(ended.error.orEmpty().isNotEmpty(), "the chat says why it ended")
+        assertEquals(1, player.stopped)
+        assertFalse(HeadsetAudio.Route.Speaker in player.routes, "never on the speaker: ${player.routes}")
     }
 
     @Test

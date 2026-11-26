@@ -82,9 +82,12 @@ class AndroidChainedAudioTest {
         assertEquals(AudioManager.MODE_NORMAL, manager.mode)
     }
 
-    /** Headphones plugged in mid-chat take the reply; unplugged, the speaker gets call routing again. */
+    /**
+     * Headphones plugged in mid-chat take the reply. Fork: unplugged, the chat is silenced rather than given speaker
+     * call routing again (HeadsetAudio.Tracker; a lost headset stops speech).
+     */
     @Test
-    fun headphonesThatComeOrGoMidChatChangeTheRoute() {
+    fun headphonesThatComeMidChatTakeTheReplyAndUnpluggedNeverHandItToTheSpeaker() {
         val headphones = device(AudioDeviceInfo.TYPE_WIRED_HEADPHONES)
         shadowOf(manager).setOutputDevices(listOf(speaker))
         shadowOf(manager).setAvailableCommunicationDevices(listOf(speaker))
@@ -99,8 +102,8 @@ class AndroidChainedAudioTest {
 
         shadowOf(manager).removeOutputDevice(headphones, true)
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(AudioManager.MODE_IN_COMMUNICATION, manager.mode)
-        assertEquals(speaker, manager.communicationDevice)
+        assertEquals(AudioManager.MODE_NORMAL, manager.mode)
+        assertNull(manager.communicationDevice)
 
         close()
         shadowOf(manager).addOutputDevice(headphones, true)

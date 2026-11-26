@@ -1,7 +1,10 @@
 package dev.hermeskotlin.core.voice
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -15,6 +18,7 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.NoiseSuppressor
 import android.os.Build
+import androidx.core.content.ContextCompat
 import dev.hermeskotlin.core.custom.HeadsetAudio
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -289,6 +293,23 @@ class AndroidSpeechPlayer(
     private var restoreChatAudio: (() -> Unit)? = null
     /** Fork: where the held call routing goes ([HeadsetAudio.Route.Usual] while none is held). */
     private var heldRoute = HeadsetAudio.Route.Usual
+    /** Fork: decides each route, and when what the chats play through has gone ([HeadsetAudio.Tracker]). */
+    private val tracker = HeadsetAudio.Tracker()
+    /**
+     * Fork: Android's warning that audio is about to move to the phone's speaker (headphones unplugged, a Bluetooth
+     * sink gone), which can come before the device callback: the chats are silenced on it. Exported, as the docs
+     * advise for system broadcasts; a forged one can only end this app's own chat.
+     */
+    private val becomingNoisy = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != AudioManager.ACTION_AUDIO_BECOMING_NOISY) return
+            val lost = mutableListOf<() -> Unit>()
+            synchronized(lock) {
+                if (tracker.becomingNoisy(open = chatAudioOwners.isNotEmpty()) == HeadsetAudio.Step.Silence) silence(lost)
+            }
+            lost.forEach { runCatching { it() } }
+        }
+    }
     /** Headphones or earbuds that come or go during a chained chat change its route. */
     private val outputsChanged = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = reroute()
@@ -332,7 +353,12 @@ class AndroidSpeechPlayer(
      */
     override fun chainedChatAudio(talkOver: Boolean, onHeadsetLost: () -> Unit): () -> Unit = synchronized(lock) {
         val owner = Any()
-        if (chatAudioOwners.isEmpty()) runCatching { audioManager.registerAudioDeviceCallback(outputsChanged, null) }
+        if (chatAudioOwners.isEmpty()) {
+            runCatching { audioManager.registerAudioDeviceCallback(outputsChanged, null) }
+            runCatching {
+                ContextCompat.registerReceiver(context, becomingNoisy, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY), ContextCompat.RECEIVER_EXPORTED)
+            }
+        }
         chatAudioOwners[owner] = ChatAudio(talkOver, onHeadsetLost)
         reroute()
         return@synchronized {
@@ -340,6 +366,7 @@ class AndroidSpeechPlayer(
                 // An old chat's finally must not restore under a newer one, here or in another controller.
                 if (chatAudioOwners.remove(owner) != null && chatAudioOwners.isEmpty()) {
                     runCatching { audioManager.unregisterAudioDeviceCallback(outputsChanged) }
+                    runCatching { context.unregisterReceiver(becomingNoisy) }
                     reroute()
                 }
             }
@@ -369,28 +396,32 @@ class AndroidSpeechPlayer(
     private fun reroute() {
         val lost = mutableListOf<() -> Unit>()
         synchronized(lock) {
-            val ports = ports()
-            // Fork: the earphones the chat was talking through went away. Silence it here and now, before the system
-            // moves its sound anywhere, and let the chats end; they aren't routed again meanwhile.
-            if (HeadsetAudio.headsetLost(heldRoute, ports)) {
-                runCatching { track?.pause(); track?.flush() }
-                runCatching { clip?.let { if (it.isPlaying) it.pause() } }
-                restoreChatAudio?.invoke()
-                restoreChatAudio = null
-                heldRoute = HeadsetAudio.Route.Usual
-                chatAudioOwners.values.mapTo(lost) { it.onHeadsetLost }
-                chatAudioOwners.keys.toList().forEach { chatAudioOwners[it] = ChatAudio(false) {} }
-            } else {
-                applyRoute(ports)
+            // Fork: whatever the route, the earphones (or other private output) the chats were playing through going
+            // away silences them here, before a route is chosen: never on to the phone's speaker.
+            when (val step = tracker.change(chatAudioOwners.isNotEmpty(), chatAudioOwners.values.any { it.talkOver }, ports())) {
+                HeadsetAudio.Step.Silence -> silence(lost)
+                is HeadsetAudio.Step.Use -> {
+                    applyRoute(step.route)
+                    tracker.held(heldRoute)
+                }
             }
         }
         lost.forEach { runCatching { it() } }
     }
 
+    /** Fork: stops what plays now, lets the routing go, and collects the chats to tell into [lost]. Under [lock]. */
+    private fun silence(lost: MutableList<() -> Unit>) {
+        runCatching { track?.pause(); track?.flush() }
+        runCatching { clip?.let { if (it.isPlaying) it.pause() } }
+        restoreChatAudio?.invoke()
+        restoreChatAudio = null
+        heldRoute = HeadsetAudio.Route.Usual
+        tracker.held(heldRoute)
+        chatAudioOwners.values.mapTo(lost) { it.onHeadsetLost }
+    }
+
     @Suppress("DEPRECATION")
-    private fun applyRoute(ports: HeadsetAudio.Ports) {
-        val wanted = if (chatAudioOwners.isEmpty()) HeadsetAudio.Route.Usual
-            else HeadsetAudio.route(ports, talkOver = chatAudioOwners.values.any { it.talkOver })
+    private fun applyRoute(wanted: HeadsetAudio.Route) {
         val held = restoreChatAudio
         if (wanted != HeadsetAudio.Route.Usual && held != null && wanted == heldRoute) {
             // The system puts the mode back to normal once no call audio has played or listened for a few seconds,
