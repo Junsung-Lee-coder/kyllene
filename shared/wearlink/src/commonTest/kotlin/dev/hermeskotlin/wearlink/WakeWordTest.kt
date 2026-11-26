@@ -26,7 +26,7 @@ class WakeWordTest {
     @Test
     fun phrasesKeepTheirLimits() {
         // Repeats once, case aside.
-        assertEquals(listOf("Rumi", "hermes"), WakePhrases.parse("Rumi rumi hermes RUMI"))
+        assertEquals(listOf("Nova", "hermes"), WakePhrases.parse("Nova nova hermes NOVA"))
         // Each cut to 40 characters.
         assertEquals(40, WakePhrases.parse("a".repeat(55)).single().length)
         // At most 24.
