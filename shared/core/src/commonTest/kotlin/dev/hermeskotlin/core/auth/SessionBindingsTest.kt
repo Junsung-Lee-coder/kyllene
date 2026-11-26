@@ -41,7 +41,10 @@ class SessionBindingsTest {
         return AuthApi(client, cookies, tokens, bindings)
     }
 
-    private suspend fun raw() = store.get("fork.session-owner.v1.${url.value}")
+    /** [gateway]'s raw state in the stored map: "pending", "bound:…", or null. */
+    private suspend fun raw(gateway: GatewayUrl = url) = store.get("fork.session-owner.v2")
+        ?.let { kotlinx.serialization.json.Json.parseToJsonElement(it) as kotlinx.serialization.json.JsonObject }
+        ?.get(gateway.value)?.let { (it as kotlinx.serialization.json.JsonPrimitive).content }
 
     @Test
     fun aPasswordSignInMarksTheBindingPendingBeforeItsCookiesAreStored() = runTest {
@@ -127,5 +130,82 @@ class SessionBindingsTest {
 
         assertFalse(asked)
         assertFalse(api.hasStoredSession(url))
+    }
+
+    // Fork: a sign-in's pending mark covers every gateway its credentials reach.
+
+    private val sibling = GatewayUrl.parse("http://100.64.0.1:9120")
+    private val sameHostTls = GatewayUrl.parse("https://100.64.0.1/hermes")
+    private val elsewhere = GatewayUrl.parse("http://100.64.0.2:9119")
+
+    @Test
+    fun aPasswordSignInMarksEveryGatewayOnItsHostPending() = runTest {
+        for (gateway in listOf(url, sameHostTls, elsewhere)) bindings.bound(gateway, alice)
+        val api = api { request ->
+            assertEquals("pending", raw(url), "marked before the login is sent")
+            respond("""{"ok":true}""", HttpStatusCode.OK, headersOf(
+                HttpHeaders.SetCookie to listOf("hermes_session_at=AT-bob; Path=/; HttpOnly"),
+                HttpHeaders.ContentType to listOf("application/json"),
+            ))
+        }
+
+        assertIs<ApiResult.Success<Unit>>(api.signIn(sibling, "password", "bob", "pw"))
+
+        // The cookie is the host's: it's a stored session for the gateway beside it too.
+        assertTrue(api.hasStoredSession(url))
+        assertEquals("pending", raw(sibling))
+        assertNull(bindings.owner(url))
+        assertNull(bindings.owner(sameHostTls))
+        assertEquals(alice, bindings.owner(elsewhere))
+    }
+
+    @Test
+    fun aBrowserSignInMarksOnlyItsGateway() = runTest {
+        bindings.bound(url, alice)
+        val api = api { respond("""{"access_token":"AT","refresh_token":"RT","expires_at":1900000000,"provider":"oidc","user_id":"bob"}""", HttpStatusCode.OK, json) }
+
+        assertIs<ApiResult.Success<Unit>>(api.redeemNativeCode(sibling, "code", "verifier"))
+
+        assertEquals(alice, bindings.owner(url))
+        assertFalse(tokens.get(url) != null)
+    }
+
+    @Test
+    fun aCookieScopedToADomainMarksTheGatewaysUnderIt() = runTest {
+        val gw1 = GatewayUrl.parse("http://gw1.lan:9119")
+        val gw2 = GatewayUrl.parse("http://gw2.lan:9119")
+        val other = GatewayUrl.parse("http://gw3.home:9119")
+        for (gateway in listOf(gw2, other)) bindings.bound(gateway, alice)
+        val api = api {
+            respond("""{"ok":true}""", HttpStatusCode.OK, headersOf(
+                HttpHeaders.SetCookie to listOf("hermes_session_at=AT-bob; Domain=lan; Path=/; HttpOnly"),
+                HttpHeaders.ContentType to listOf("application/json"),
+            ))
+        }
+
+        assertIs<ApiResult.Success<Unit>>(api.signIn(gw1, "password", "bob", "pw"))
+
+        assertTrue(api.hasStoredSession(gw2))
+        assertNull(bindings.owner(gw2))
+        assertEquals(alice, bindings.owner(other))
+    }
+
+    @Test
+    fun cookieDomainsMatchHostsAndNamesUnderOneDomain() {
+        assertTrue(SessionBindings.sameCookieDomain("100.64.0.1", "100.64.0.1"))
+        assertFalse(SessionBindings.sameCookieDomain("100.64.0.1", "100.64.0.2"))
+        assertTrue(SessionBindings.sameCookieDomain("a.example.com", "b.example.com"))
+        assertTrue(SessionBindings.sameCookieDomain("hermes.example.com", "example.com"))
+        assertFalse(SessionBindings.sameCookieDomain("a.example.com", "a.example.org"))
+        assertFalse(SessionBindings.sameCookieDomain("localhost", "otherhost"))
+        assertFalse(SessionBindings.sameCookieDomain("::1", "fe80::1"))
+    }
+
+    @Test
+    fun aStoredMapThatDoesntReadCountsAsNoAccount() = runTest {
+        store.put("fork.session-owner.v2", "not json")
+        assertNull(bindings.owner(url))
+        bindings.pending(url)
+        assertEquals("pending", raw(url))
     }
 }

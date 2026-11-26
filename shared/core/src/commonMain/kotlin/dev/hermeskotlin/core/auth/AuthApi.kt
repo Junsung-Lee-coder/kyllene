@@ -54,9 +54,11 @@ class AuthApi(
      * Fork: a new sign-in's credentials are no known account's until its saved chats are given to it, so the binding
      * goes to pending before they're stored. If even that can't be written, the sign-in doesn't happen.
      */
-    private suspend fun newCredentials(url: GatewayUrl, login: suspend () -> ApiResult<Unit>): ApiResult<Unit> {
+    private suspend fun newCredentials(url: GatewayUrl, cookies: Boolean, login: suspend () -> ApiResult<Unit>): ApiResult<Unit> {
         try {
-            sessionBindings.pending(url)
+            // Session cookies are the host's (and a Domain cookie its domain's), so they reach the gateways beside this
+            // one too; a browser sign-in's tokens are this gateway's alone.
+            if (cookies) sessionBindings.pendingForCookies(url) else sessionBindings.pending(url)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -79,7 +81,7 @@ class AuthApi(
      * `POST /auth/native/token`: the browser's one-time code and the PKCE verifier → bearer tokens, kept for [url].
      * An old password session's cookies go, so the app can't look signed in on them once the tokens end.
      */
-    suspend fun redeemNativeCode(url: GatewayUrl, code: String, codeVerifier: String): ApiResult<Unit> = newCredentials(url) {
+    suspend fun redeemNativeCode(url: GatewayUrl, code: String, codeVerifier: String): ApiResult<Unit> = newCredentials(url, cookies = false) {
         apiCall {
             client.post(url.resolve("auth/native/token")) {
                 contentType(ContentType.Application.Json)
@@ -92,13 +94,17 @@ class AuthApi(
     }
 
     /** `POST /auth/password-login` → session cookies. Old browser sign-in tokens would win over them, so they go. */
-    suspend fun signIn(url: GatewayUrl, provider: String, username: String, password: String): ApiResult<Unit> = newCredentials(url) {
+    suspend fun signIn(url: GatewayUrl, provider: String, username: String, password: String): ApiResult<Unit> = newCredentials(url, cookies = true) {
         apiCall(isLogin = true) {
             client.post(url.resolve("auth/password-login")) {
                 contentType(ContentType.Application.Json)
                 setBody(PasswordLoginBody(provider, username, password))
             }
-        }.map { tokens.set(url, null) }
+        }.map {
+            tokens.set(url, null)
+            // Fork: a cookie the response scoped to a domain wider than that one reaches its hosts too.
+            for (domain in cookies.sharedDomains(Url(url.value))) sessionBindings.pendingWithin(domain)
+        }
     }
 
     /** `GET /api/auth/me` — cheap check that the stored session is still valid. */

@@ -1047,13 +1047,42 @@ class AppViewModelTest {
     }
 
     @Test
+    fun anotherGatewayOnTheSameHostSigningInLeavesThisGatewaysChatsUnread() = runTest {
+        // Session cookies are the host's, whatever the port or path: the gateway beside this one shares them.
+        val sibling = SavedGateway("http://100.64.0.1:9120")
+        val vm = aliceWithAChat()
+        vm.onSessionExpired()
+        gateways.save(sibling)
+        signedInAs = "bob"
+        assertIs<ApiResult.Success<Unit>>(auth.signIn(sibling.gatewayUrl, "password", "bob", "pw"))
+        vm.onSignedIn(sibling)
+        vm.route.first { it is Route.Chat && it.gateway.url == sibling.url }
+        // Bob's cookie is a kept session for the first gateway too.
+        assertTrue(auth.hasStoredSession(home.gatewayUrl))
+
+        // Offline, back to the first gateway: nothing of Alice's.
+        signedInAs = null
+        vm.switchGateway(home)
+        vm.route.first { it is Route.Chat && it.gateway.url == home.url }
+        assertNull(savedChat())
+        // Nor after a relaunch there.
+        gateways.select(home.url)
+        viewModel().route.first { it is Route.Chat && it.gateway.url == home.url }
+        assertNull(savedChat())
+        // Put away, not deleted: hers again once she signs in there.
+        assertEquals(1, putAwayWithAlicesChat().size)
+        signedInTo(vm, "alice")
+        assertEquals(listOf("alice's"), savedChat())
+    }
+
+    @Test
     fun signingOutForgetsWhichAccountTheSessionWas() = runTest {
         val vm = aliceWithAChat()
         assertEquals(RetainedCopies.owner("password", "alice"), auth.sessionBindings.owner(home.gatewayUrl))
         vm.signOut()
         vm.awaitSignIn(home)
         assertNull(auth.sessionBindings.owner(home.gatewayUrl))
-        assertNull(disk.get("fork.session-owner.v1.${home.gatewayUrl.value}"))
+        assertNull(disk.get("fork.session-owner.v2"))
     }
 
     private suspend fun until(condition: suspend () -> Boolean) {

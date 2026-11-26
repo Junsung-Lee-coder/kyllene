@@ -65,6 +65,11 @@ class PersistentCookiesStorage(
 
     suspend fun hasCookies(url: Url): Boolean = get(url).isNotEmpty()
 
+    /** Fork: the domains of the cookies for [url] (any path) that a `Domain` attribute scoped wider than its host. */
+    internal suspend fun sharedDomains(url: Url): Set<String> = mutex.withLock {
+        load().filter { !it.hostOnly && it.matches(url, anyPath = true) }.mapTo(HashSet()) { it.domain }
+    }
+
     /**
      * The stored cookies for [url] as `Set-Cookie` values, for a cookie store that has to be told each
      * cookie by text (the in-app WebView's jar, which has no access to this module's Ktor types):
