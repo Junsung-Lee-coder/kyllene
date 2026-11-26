@@ -89,4 +89,7 @@
     <string name="settings_phone_live_detail">Desativado: uma conversa por voz grava um pedido até você enviá-lo. Ativado: inicia uma chamada ao vivo.</string>
     <string name="settings_background_button">Botão dos fones em segundo plano</string>
     <string name="settings_background_button_detail">Com uma conversa por voz aberta, o botão dos fones continua iniciando gravações quando você sai do app, em vez de controlar a música. A notificação fica visível enquanto isso.</string>
+    <!-- Fork: live call transcripts kept on the phone. -->
+    <string name="voice_error_transcript_unsaved">A transcrição desta chamada ainda não pôde ser salva no telefone; ela é mantida e será tentada de novo.</string>
+    <string name="voice_error_transcript_unreadable">Parte de uma transcrição anterior de chamada ao vivo deste chat não pôde ser lida. Ela fica no telefone como estava.</string>
 </resources>

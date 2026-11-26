@@ -89,4 +89,7 @@
     <string name="settings_phone_live_detail">Désactivé : un chat vocal enregistre une demande jusqu'à ce que vous l'envoyiez. Activé : il lance un appel en direct.</string>
     <string name="settings_background_button">Bouton des écouteurs en arrière-plan</string>
     <string name="settings_background_button_detail">Quand un chat vocal est ouvert, le bouton des écouteurs continue de lancer des enregistrements une fois l'app quittée, au lieu de contrôler la musique. Sa notification reste affichée pendant ce temps.</string>
+    <!-- Fork: live call transcripts kept on the phone. -->
+    <string name="voice_error_transcript_unsaved">La transcription de cet appel n'a pas encore pu être enregistrée sur le téléphone ; elle est conservée et un nouvel essai aura lieu.</string>
+    <string name="voice_error_transcript_unreadable">Une partie d'une transcription d'appel en direct précédente de ce chat n'a pas pu être lue. Elle est conservée telle quelle sur le téléphone.</string>
 </resources>

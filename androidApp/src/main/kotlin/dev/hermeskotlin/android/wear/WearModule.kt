@@ -10,7 +10,7 @@ import dev.hermeskotlin.ui.voice.CatalogueWatchCallWords
 import dev.hermeskotlin.ui.voice.WatchCalls
 import dev.hermeskotlin.ui.calls.PhoneCallModel
 import org.koin.android.ext.koin.androidContext
-import org.koin.core.module.dsl.viewModelOf
+import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 /**
@@ -23,11 +23,13 @@ val wearModule = module {
     single { PebbleRequests(get(), get(), get(), get(), get()) }
     single { PebbleRinger(androidContext(), get(), get(), get(), get()) }
     single { WatchRelay(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), CatalogueWatchCallWords) }
-    single { WatchCalls(get(), get(), get(), get(), get()) }
+    // Fork: the watch's live calls are kept with the phone's (LiveTranscripts).
+    single { WatchCalls(get(), get(), get(), get(), get(), transcripts = get()) }
     single { WearRequests(get(), get()) }
     single(createdAtStart = true) { WatchProfileNotifier(androidContext(), get(), get(), get()).also { it.start() } }
     single { WatchRinger(androidContext(), get(), get(), get(), get(), get()) }
     single { WatchAccentSync(androidContext(), get(), get()) }
     // A call for an answer picked up on the phone holds its chat as a call from the watch does.
-    viewModelOf(::PhoneCallModel)
+    // Fork: spelled out, for the live transcripts it keeps.
+    viewModel { PhoneCallModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), liveTranscripts = get()) }
 }

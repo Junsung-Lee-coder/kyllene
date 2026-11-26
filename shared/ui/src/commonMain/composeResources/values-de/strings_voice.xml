@@ -89,4 +89,7 @@
     <string name="settings_phone_live_detail">Aus: Ein Sprachchat nimmt eine Anfrage auf, bis du sie sendest. An: Er startet einen Live-Anruf.</string>
     <string name="settings_background_button">Kopfhörertaste im Hintergrund</string>
     <string name="settings_background_button_detail">Ist ein Sprachchat offen, startet die Kopfhörertaste auch nach dem Verlassen der App Aufnahmen, statt Musik zu steuern. Die Benachrichtigung bleibt so lange sichtbar.</string>
+    <!-- Fork: live call transcripts kept on the phone. -->
+    <string name="voice_error_transcript_unsaved">Das Transkript dieses Anrufs konnte noch nicht auf dem Telefon gespeichert werden; es wird behalten und erneut versucht.</string>
+    <string name="voice_error_transcript_unreadable">Ein Teil eines früheren Live-Anruf-Transkripts in diesem Chat konnte nicht gelesen werden. Es bleibt unverändert auf dem Telefon.</string>
 </resources>

@@ -31,6 +31,12 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import dev.hermeskotlin.core.custom.ChatTurn
+import dev.hermeskotlin.core.custom.LiveTranscripts
+import dev.hermeskotlin.core.custom.withEarlierCalls
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -56,7 +62,13 @@ internal class LiveConversation(
     private val opener: String? = null,
     /** The session has answered or failed; finishing transport setup alone is not a result. */
     private val onConnectionResult: suspend () -> Unit = {},
+    /** Fork: where this call's transcript is kept on the phone (LiveTranscripts); null keeps nothing. */
+    private val recording: LiveTranscripts.Recording? = null,
+    /** Fork: the same account's and session's earlier calls, for this call's opening history. */
+    private val earlier: List<LiveTranscripts.EarlierCall> = emptyList(),
 ) {
+    /** Fork: what's taken of the transcript couldn't be written yet; said once until it is. */
+    private var unsaved = false
     private val transcript = ArrayList<LiveFragment>()
     private var eventSeq = 0
     private var delegation: Job? = null
@@ -93,14 +105,30 @@ internal class LiveConversation(
 
     /** The chat so far, for the voice to open with. */
     fun history(): List<LiveHistoryMessage> = liveHistory(
-        session.state.value.messages.mapNotNull { message ->
-            when (message) {
-                is ChatMessage.User -> LiveFragment.Speaker.User to message.text
-                is ChatMessage.Assistant -> LiveFragment.Speaker.Assistant to speakableText(message.text)
-                else -> null
-            }
-        },
+        // Fork: with the session's earlier calls, where they happened (withEarlierCalls).
+        withEarlierCalls(
+            session.state.value.messages.mapNotNull { message ->
+                when (message) {
+                    is ChatMessage.User -> ChatTurn(message.timestamp, LiveFragment.Speaker.User, message.text)
+                    is ChatMessage.Assistant -> ChatTurn(message.timestamp, LiveFragment.Speaker.Assistant, speakableText(message.text))
+                    else -> null
+                }
+            },
+            earlier,
+        ),
     )
+
+    /** Fork: keeps a piece of the transcript; the first time one can't be written, the panel says so. */
+    private suspend fun keep(write: suspend (LiveTranscripts.Recording) -> Boolean) {
+        val r = recording ?: return
+        if (write(r)) {
+            unsaved = false
+        } else if (!unsaved) {
+            unsaved = true
+            val why = runCatching { getString(Res.string.voice_error_transcript_unsaved) }.getOrNull() ?: TRANSCRIPT_UNSAVED
+            state.update { it.copy(error = why) }
+        }
+    }
 
     /**
      * Runs the call until it ends: hung up, "stop" said, or dropped. [connect] opens it (it throws when it
@@ -137,13 +165,25 @@ internal class LiveConversation(
                 delay(POLL_MS)
             }
         }
+        // Fork: the call's chat gets its stored session (a new chat, with its first request): its transcript goes there.
+        val sessionWatch = recording?.let { r ->
+            launch {
+                val id = session.state.mapNotNull { it.storedSessionId }.first()
+                keep { r.session(id) }
+            }
+        }
         val reader = launch {
             var utterance = StringBuilder()
             var settle: Job? = null
             for (raw in call.events) {
-                when (val event = parseLiveEvent(raw)) {
+                val parsed = parseLiveEvent(raw)
+                // Fork: transcript that can't be read is kept as it came, never used as context.
+                if (parsed == null && "transcript" in raw) keep { it.raw(raw) }
+                when (val event = parsed) {
                     is LiveEvent.Transcript -> {
                         if (event.fragment.speaker == LiveFragment.Speaker.Assistant) onConnectionResult()
+                        // Fork: each piece the call sends, kept once, in order.
+                        keep { it.add(event.fragment) }
                         transcript += event.fragment
                         if (transcript.size > MAX_FRAGMENTS) transcript.subList(0, transcript.size - KEPT_FRAGMENTS).clear()
                         caption(event.fragment)
@@ -251,6 +291,9 @@ internal class LiveConversation(
         try {
             ended.await()
         } finally {
+            sessionWatch?.cancel()
+            // Fork: what's still waiting is written before the call goes, whatever ended it.
+            recording?.let { r -> withContext(NonCancellable) { runCatching { r.flush() } } }
             asker.cancel()
             poll.cancel()
             reader.cancel()
@@ -537,6 +580,8 @@ internal class LiveConversation(
     private fun nextId(prefix: String) = "${prefix}_${++eventSeq}"
 
     private companion object {
+        /** Fork: the words where the catalogue can't be read (host tests); the app says them in its language. */
+        const val TRANSCRIPT_UNSAVED = "This call's transcript couldn't be saved on the phone yet; it's kept and tried again."
         const val POLL_MS = 100L
         const val UTTERANCE_SETTLE_MS = 1_500L
         const val TURN_START_MS = 15_000L

@@ -89,4 +89,7 @@
     <string name="settings_phone_live_detail">关闭：语音聊天录制一条请求，直到你发送。开启：发起实时通话。</string>
     <string name="settings_background_button">后台耳机按键</string>
     <string name="settings_background_button_detail">语音聊天打开时，离开应用后耳机按键仍会开始录音，而不是控制音乐。期间其通知保持显示。</string>
+    <!-- Fork: live call transcripts kept on the phone. -->
+    <string name="voice_error_transcript_unsaved">此通话的转写暂时无法保存到手机；已保留并会重试。</string>
+    <string name="voice_error_transcript_unreadable">此聊天中较早的实时通话转写有部分无法读取。它已按原样保留在手机上。</string>
 </resources>

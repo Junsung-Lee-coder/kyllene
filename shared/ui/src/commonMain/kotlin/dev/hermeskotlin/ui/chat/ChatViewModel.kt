@@ -48,6 +48,7 @@ import dev.hermeskotlin.core.profiles.ProfilesApi
 import dev.hermeskotlin.core.sessions.CaughtUp
 import dev.hermeskotlin.core.sessions.SeenStore
 import dev.hermeskotlin.core.sessions.SessionsApi
+import dev.hermeskotlin.core.custom.LiveTranscripts
 import dev.hermeskotlin.core.settings.SettingsStore
 import dev.hermeskotlin.core.settings.AppSettings
 import dev.hermeskotlin.core.settings.RunningSend
@@ -246,6 +247,8 @@ class ChatViewModel(
     nextPromptApi: NextPromptApi? = null,
     /** Keeps Read aloud going with the screen off; without it, leaving the app stops the reading. */
     readAloudKeepAlive: ReadAloudKeepAlive? = null,
+    /** Fork: live call transcripts kept on the phone; none where the platform keeps none. */
+    liveTranscripts: LiveTranscripts? = null,
 ) : ViewModel(), ChatActions {
 
     /** Dictation, voice chat and Read aloud for the open chat. */
@@ -256,6 +259,7 @@ class ChatViewModel(
         liveCalls = liveCalls,
         readAloudVoices = readAloudVoices ?: InMemoryReadAloudVoices(),
         readAloudKeepAlive = readAloudKeepAlive,
+        liveTranscripts = liveTranscripts,
     )
 
     /** The profile's pet and its gallery. */

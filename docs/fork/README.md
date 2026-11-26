@@ -183,6 +183,32 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      the activity's key path, driving the controller), `AndroidVoiceRecorderTest`'s quiet Talk recording, and
      `WatchNewChatTest`'s default.
 
+6. **Live call transcripts are kept on the phone, and the session's next call opens with them.**
+   - Every piece of transcript a live call sends (what you said, what the voice said) is kept on the phone, for the
+     phone's own calls (a chat's, or one the agent places) and a watch's call, which the phone runs. They're kept by
+     the gateway's verified account, the gateway and the chat's stored session, in their own database
+     (`live-transcripts.db`), apart from the offline cache: deleting saved chats or messages, signing out or removing
+     a gateway doesn't touch them, and nothing trims or expires them. Each piece is sealed with the cache's key.
+   - A new chat gets its session with its first request; a call's pieces until then go to that session once it does.
+     A gateway whose account isn't verified has its calls kept, but no call is given them.
+   - The next live call in the same account's same session, on the phone or the watch, after a restart too, opens
+     with them: the gateway's `voice-live/session` takes the chat's history, and the earlier calls go in it where they
+     happened among the chat's messages (`withEarlierCalls`), each once; that history keeps the newest that fit, as
+     before. Another session's or another account's calls never go in. Nothing is made up from summaries or Talk.
+   - The same timed piece told twice is kept once. A piece that can't be sealed or written waits in memory and is
+     tried again, and the voice panel (or the watch) says so once; a transcript event that can't be read is kept as
+     it came, never used as context. Pieces that can't be read later (a lost key) stay on disk, and the panel says so.
+   - Code: `core/custom/LiveTranscripts.kt` (the table, its own Room database, the store, `withEarlierCalls`), its
+     builders (`androidMain`/`jvmMain`), `PlatformModule.android.kt`, `LiveConversation` (`recording`, `earlier`),
+     `VoiceController.startLive`, `WatchCalls.run`, and `ChatViewModel`/`PhoneCallModel`/`WearModule`/`UiModule`
+     passing the store. Two strings, in every language.
+   - Tests: `core/custom/LiveTranscriptsDatabaseTest.kt` (the real Room database and sealer: after closing, apart by
+     account, gateway and session, a call's session found later, saved-chat deletion, duplicates, writes and seals that
+     fail then work, unreadable pieces), `core/custom/LiveContinuityTest.kt`, and `ui/voice/LiveTranscriptsCallTest.kt`
+     (the real controller, and `WatchCalls` over the real `WatchRelay`: fixture events kept and given to the next
+     call's history only in the same account and session).
+   - Not covered: a transcript browser, and anything the gateway itself keeps.
+
 The fork adds two switches to Settings › Voice and the Ready state to the voice panel; it doesn't otherwise change
 the settings screens or layout. The watch app changes only as described above.
 
@@ -229,6 +255,9 @@ For each conflict or failing test:
   `VoiceButton` from there instead of the fork's session. If it changes `AndroidLiveCall`'s routing, keep
   `route.route(::outputLost)` before the audio device module is built, `route.playout()` on its builder, and
   `route.unroute()` on close; if it builds the module elsewhere, carry the playout attributes there.
+- **Live transcripts.** Wherever upstream builds `LiveConversation`, pass `recording` (begun for the chat's gateway and
+  stored session) and `earlier`. Keep `LiveTranscriptDatabase` its own file; if its table changes, add a real
+  migration (it has no destructive fallback). If upstream keeps live transcripts itself, compare before dropping these.
 - **Talk.** If upstream changes `startChat`, `hear` or `converseOnce`, keep the `mode` branch before the live check,
   `awaitTalk()` at the top of `hear`'s loop, and `MANUAL_TALK` for Talk's recordings. If it adds a `VoicePhase`, give
   it a place in `voicePress` and the panel's label. If upstream adds its own Live switch, use theirs and drop

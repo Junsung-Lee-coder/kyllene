@@ -5,6 +5,10 @@ import dev.hermeskotlin.core.auth.LoopbackReceiver
 import dev.hermeskotlin.core.cache.KeystoreSealer
 import dev.hermeskotlin.core.cache.Sealer
 import dev.hermeskotlin.core.cache.offlineDatabase
+import dev.hermeskotlin.core.custom.LiveTranscriptDatabase
+import dev.hermeskotlin.core.custom.LiveTranscripts
+import dev.hermeskotlin.core.custom.SessionBindings
+import dev.hermeskotlin.core.custom.liveTranscriptDatabase
 import dev.hermeskotlin.core.gateway.MtlsAppContext
 import dev.hermeskotlin.core.settings.WallpaperStore
 import dev.hermeskotlin.core.storage.FileBlobFile
@@ -49,4 +53,10 @@ actual val platformModule: Module = module {
     }
     single { offlineDatabase(androidContext()) }
     single<Sealer> { KeystoreSealer(get()) }
+    // Fork: live call transcripts, kept by verified account, gateway and session (LiveTranscripts).
+    single { liveTranscriptDatabase(androidContext()) }
+    single {
+        val bindings = get<SessionBindings>()
+        LiveTranscripts(get<LiveTranscriptDatabase>().dao(), get(), owner = { gateway -> bindings.owner(gateway) }, now = { System.currentTimeMillis() })
+    }
 }

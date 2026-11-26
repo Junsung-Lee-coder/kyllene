@@ -89,4 +89,7 @@
     <string name="settings_phone_live_detail">Desactivado: un chat de voz graba una solicitud hasta que la envíes. Activado: inicia una llamada en directo.</string>
     <string name="settings_background_button">Botón de auriculares en segundo plano</string>
     <string name="settings_background_button_detail">Con un chat de voz abierto, el botón de los auriculares sigue iniciando grabaciones al salir de la app, en lugar de controlar la música. Su notificación sigue visible mientras tanto.</string>
+    <!-- Fork: live call transcripts kept on the phone. -->
+    <string name="voice_error_transcript_unsaved">La transcripción de esta llamada aún no se pudo guardar en el teléfono; se conserva y se vuelve a intentar.</string>
+    <string name="voice_error_transcript_unreadable">No se pudo leer parte de una transcripción anterior de llamada en directo de este chat. Se conserva tal cual en el teléfono.</string>
 </resources>

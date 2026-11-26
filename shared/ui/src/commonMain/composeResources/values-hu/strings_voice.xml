@@ -89,4 +89,7 @@
     <string name="settings_phone_live_detail">Ki: a hangcsevegés egy kérést rögzít, amíg el nem küldöd. Be: élő hívást indít.</string>
     <string name="settings_background_button">Fülhallgató gombja a háttérben</string>
     <string name="settings_background_button_detail">Nyitott hangcsevegés mellett a fülhallgató gombja az alkalmazásból kilépve is felvételt indít a zene vezérlése helyett. Közben az értesítése látható marad.</string>
+    <!-- Fork: live call transcripts kept on the phone. -->
+    <string name="voice_error_transcript_unsaved">A hívás átirata még nem menthető a telefonra; megtartjuk, és újra megpróbáljuk.</string>
+    <string name="voice_error_transcript_unreadable">A csevegés egy korábbi élő hívásának átiratából egy rész nem olvasható. Változatlanul a telefonon marad.</string>
 </resources>

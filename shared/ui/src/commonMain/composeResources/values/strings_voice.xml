@@ -95,4 +95,7 @@
     <string name="settings_phone_live_detail">Off: a voice chat records one request until you send it. On: it starts a live call.</string>
     <string name="settings_background_button">Background earphone button</string>
     <string name="settings_background_button_detail">Once a voice chat is open, the earphone button keeps starting recordings when you leave the app, instead of controlling music. Its notification stays up meanwhile.</string>
+    <!-- Fork: live call transcripts kept on the phone. -->
+    <string name="voice_error_transcript_unsaved">This call's transcript couldn't be saved on the phone yet; it's kept and tried again.</string>
+    <string name="voice_error_transcript_unreadable">Some earlier live call transcript in this chat couldn't be read. It's kept on the phone as it was.</string>
 </resources>

@@ -19,6 +19,7 @@ import dev.hermeskotlin.core.voice.BargeInSettings
 import dev.hermeskotlin.core.voice.DeviceDictation
 import dev.hermeskotlin.core.voice.DeviceDictationUnavailable
 import dev.hermeskotlin.core.voice.LiveCalls
+import dev.hermeskotlin.core.custom.LiveTranscripts
 import dev.hermeskotlin.core.voice.ReadAloudVoices
 import dev.hermeskotlin.core.voice.InMemoryReadAloudVoices
 import dev.hermeskotlin.core.voice.ReadAloudControls
@@ -155,6 +156,8 @@ class VoiceController(
     private val deviceLock: DeviceLock = DeviceLock.None,
     /** Holds Read aloud up while Herald is out of sight; without it, leaving the app stops the reading. */
     private val readAloudKeepAlive: ReadAloudKeepAlive? = null,
+    /** Fork: live call transcripts kept on the phone, and given to the session's next call (LiveTranscripts). */
+    private val liveTranscripts: LiveTranscripts? = null,
     private val liveCalls: LiveCalls? = null,
 ) {
     private val _chat = MutableStateFlow(VoiceChatState())
@@ -555,8 +558,20 @@ class VoiceController(
         val micNotice = if (player.headsetMicUnavailable()) {
             runCatching { getString(Res.string.voice_error_headset_mic_unavailable) }.getOrNull() ?: HEADSET_MIC_UNAVAILABLE
         } else null
-        _chat.value = VoiceChatState(VoicePhase.Connecting, live = true, error = micNotice)
-        val conversation = LiveConversation(call, session, _chat, deviceLock, opener?.liveOpener(), onConnectionResult)
+        // Fork: this call is kept on the phone under the chat's account and session, and opens with that session's
+        // earlier calls. Some of them that can't be read stay on disk, and the panel says so.
+        val sessionId = session.state.value.storedSessionId
+        val earlier = liveTranscripts?.earlier(gateway, sessionId)
+        val recording = liveTranscripts?.begin(gateway, sessionId, LiveTranscripts.Device.Phone)
+        val earlierNotice = if (earlier != null && (earlier.unreadable > 0 || earlier.failed)) {
+            runCatching { getString(Res.string.voice_error_transcript_unreadable) }.getOrNull() ?: TRANSCRIPT_UNREADABLE
+        } else null
+        _chat.value = VoiceChatState(VoicePhase.Connecting, live = true, error = micNotice ?: earlierNotice)
+        val conversation = LiveConversation(
+            call, session, _chat, deviceLock, opener?.liveOpener(), onConnectionResult,
+            recording = recording,
+            earlier = earlier?.calls.orEmpty(),
+        )
         live = conversation
         var error: String? = null
         try {
@@ -1498,6 +1513,7 @@ class VoiceController(
         const val HEADSET_LOST = "Your earphones disconnected, so the voice chat stopped instead of playing on the phone's speaker."
         const val HEADSET_MIC_UNAVAILABLE = "Your earphones' microphone can't be used here, so the phone's microphone is listening."
         const val NOTHING_HEARD = "Didn't catch anything."
+        const val TRANSCRIPT_UNREADABLE = "Some earlier live call transcript in this chat couldn't be read. It's kept on the phone as it was."
         const val LIVE_UNAVAILABLE = "Live voice isn't set up for this profile on your gateway. Turn Phone Live off to use Talk."
 
         const val MAX_FAILURES = 3

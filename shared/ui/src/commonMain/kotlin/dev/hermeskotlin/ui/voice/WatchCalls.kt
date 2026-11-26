@@ -40,6 +40,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.time.TimeSource
+import dev.hermeskotlin.core.custom.LiveTranscripts
 import dev.hermeskotlin.ui.resources.*
 import org.jetbrains.compose.resources.getString
 
@@ -60,6 +61,8 @@ class WatchCalls(
     private val outbox: WatchOutbox,
     appScope: CoroutineScope,
     private val openers: CallOpeners = CallOpeners(),
+    /** Fork: the watch's live calls are kept on the phone with its own, and given to the session's next call. */
+    private val transcripts: LiveTranscripts? = null,
 ) {
     private val serial = Dispatchers.Default.limitedParallelism(1)
     private val scope = CoroutineScope(appScope.coroutineContext + SupervisorJob(appScope.coroutineContext[Job]) + serial)
@@ -140,7 +143,19 @@ class WatchCalls(
 
         val voice = MutableStateFlow(VoiceChatState(VoicePhase.Connecting, live = true))
         // A call the agent placed, picked up on the watch: the voice opens with why.
-        val conversation = LiveConversation(held, chat.session, voice, opener = openers.take(start.chatId)?.liveOpener())
+        // Fork: kept under the chat's account and session; it opens with that session's earlier calls, the phone's and
+        // the watch's alike. Some that can't be read stay on disk, and the watch's call line says so.
+        val sessionId = chat.session.state.value.storedSessionId
+        val earlier = transcripts?.earlier(chat.gateway, sessionId)
+        val recording = transcripts?.begin(chat.gateway, sessionId, LiveTranscripts.Device.Watch)
+        if (earlier != null && (earlier.unreadable > 0 || earlier.failed)) {
+            voice.value = voice.value.copy(error = getString(Res.string.voice_error_transcript_unreadable))
+        }
+        val conversation = LiveConversation(
+            held, chat.session, voice, opener = openers.take(start.chatId)?.liveOpener(),
+            recording = recording,
+            earlier = earlier?.calls.orEmpty(),
+        )
         var answer: String? = null
         held.onAnswer = { sdp ->
             answer = sdp
