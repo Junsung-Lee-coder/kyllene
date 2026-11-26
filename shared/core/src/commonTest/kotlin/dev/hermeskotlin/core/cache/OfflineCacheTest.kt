@@ -111,18 +111,6 @@ class OfflineCacheTest {
     }
 
     @Test
-    fun theChatsSavedLongestAgoGoPastTheLimit() = runTest {
-        repeat(OfflineCache.MAX_TRANSCRIPTS + 1) { n ->
-            clock = 1_000L + n
-            cache.saveTranscript(home, null, "s$n", listOf(message(1, "user")), rowsSessionId = "s$n")
-        }
-
-        assertNull(cache.savedTranscript(home, null, "s0"))
-        assertNotNull(cache.savedTranscript(home, null, "s1"))
-        assertNotNull(cache.savedTranscript(home, null, "s${OfflineCache.MAX_TRANSCRIPTS}"))
-    }
-
-    @Test
     fun forgettingAChatDropsItsRowsAndItsPlaceInTheList() = runTest {
         cache.saveList(home, null, SessionListFilter.Recent, listOf(SessionSummary("a"), SessionSummary("b")))
         cache.saveTranscript(home, null, "a", listOf(message(1, "user")), rowsSessionId = "a")

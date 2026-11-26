@@ -62,8 +62,8 @@ class OfflineCache(
     }
 
     /**
-     * Saves the newest [MAX_TRANSCRIPT_ROWS] of [rows], from a turn's start, in place of what [sessionId] had saved,
-     * and drops the least recently saved chats past [MAX_TRANSCRIPTS].
+     * Saves the newest [MAX_TRANSCRIPT_ROWS] of [rows], from a turn's start, in place of what [sessionId] had saved.
+     * Other chats' copies stay however many there are: only the person deleting them drops them.
      */
     suspend fun saveTranscript(
         gateway: GatewayUrl,
@@ -94,7 +94,6 @@ class OfflineCache(
         )
         val saved = sealed.takeLast(kept.size).mapIndexed { index, row -> SavedMessageRow(gateway.value, profile.key, sessionId, index, row) }
         dao.replaceTranscript(transcript, saved)
-        dao.transcriptsBeyond(MAX_TRANSCRIPTS).forEach { dao.forgetTranscript(it.gateway, it.profile, it.sessionId) }
     }
 
     /** Drops [sessionId] from the device: it was deleted, or the gateway no longer has it. */
@@ -126,9 +125,6 @@ class OfflineCache(
     private val String?.key: String get() = this ?: ""
 
     companion object {
-        /** Chats whose rows are kept; reading another drops the one read longest ago. */
-        const val MAX_TRANSCRIPTS = 50
-
         /** Rows kept per chat: a few pages, enough to read back over the last turns. */
         const val MAX_TRANSCRIPT_ROWS = 200
 
