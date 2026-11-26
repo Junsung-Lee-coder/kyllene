@@ -188,8 +188,19 @@ class LiveTranscripts(
             return flush()
         }
 
-        /** Writes what's waiting; false when some of it still can't be. */
+        /**
+         * Writes what's waiting, sealing first what couldn't be sealed before; false when some of it still can't be
+         * (it stays here, never written in the clear). Every way in tries it: the next piece, an empty one, a session
+         * found, the call's end.
+         */
         suspend fun flush(): Boolean {
+            // Sealed in order, as far as the sealer lets; what it still won't seal waits for the next try.
+            while (unsealed.isNotEmpty()) {
+                val u = unsealed.first()
+                val sealed = try { sealer.seal(u.text) } catch (e: CancellationException) { throw e } catch (_: Exception) { break }
+                pending += piece(u.seq, u.speaker, u.startMs, u.endMs, u.at, sealed)
+                unsealed.removeFirst()
+            }
             try {
                 while (pending.isNotEmpty()) {
                     val next = pending.first()
@@ -201,7 +212,7 @@ class LiveTranscripts(
                     dao.assign(account, gateway, callId, sessionId)
                     assignPending = false
                 }
-                return true
+                return unsealed.isEmpty()
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -212,25 +223,17 @@ class LiveTranscripts(
         private suspend fun keep(speaker: String, text: String, startMs: Long, endMs: Long): Boolean {
             val sealed = try { sealer.seal(text) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
             // Never written in the clear: a piece that can't be sealed waits here, as it came, and is tried again.
+            // What's already sealed still goes now.
             if (sealed == null) {
                 unsealed += Unsealed(seq++, speaker, text, startMs, endMs, now())
+                flush()
                 return false
             }
             pending += piece(seq++, speaker, startMs, endMs, now(), sealed)
-            return resealAndFlush()
+            return flush()
         }
 
         private val unsealed = ArrayDeque<Unsealed>()
-
-        private suspend fun resealAndFlush(): Boolean {
-            while (unsealed.isNotEmpty()) {
-                val u = unsealed.first()
-                val sealed = try { sealer.seal(u.text) } catch (e: CancellationException) { throw e } catch (_: Exception) { return false }
-                pending += piece(u.seq, u.speaker, u.startMs, u.endMs, u.at, sealed)
-                unsealed.removeFirst()
-            }
-            return flush()
-        }
 
         private fun piece(seq: Int, speaker: String, startMs: Long, endMs: Long, at: Long, sealed: ByteArray) =
             LiveTranscriptPiece(account, gateway, sessionId, callId, seq, device.key, speaker, startMs, endMs, startedAt, at, sealed)

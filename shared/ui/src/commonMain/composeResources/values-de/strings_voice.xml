@@ -92,4 +92,5 @@
     <!-- Fork: live call transcripts kept on the phone. -->
     <string name="voice_error_transcript_unsaved">Das Transkript dieses Anrufs konnte noch nicht auf dem Telefon gespeichert werden; es wird behalten und erneut versucht.</string>
     <string name="voice_error_transcript_unreadable">Ein Teil eines früheren Live-Anruf-Transkripts in diesem Chat konnte nicht gelesen werden. Es bleibt unverändert auf dem Telefon.</string>
+    <string name="voice_error_transcript_tail_unsaved">Das Ende des Transkripts dieses Anrufs konnte nicht auf dem Telefon gespeichert werden.</string>
 </resources>

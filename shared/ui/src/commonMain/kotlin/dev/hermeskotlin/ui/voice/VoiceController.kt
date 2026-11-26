@@ -243,6 +243,8 @@ class VoiceController(
     private var talkTurn: Job? = null
     /** Fork: whether Talk stays Ready, holding the microphone service and the button, with Herald out of sight. */
     private var readyAway: () -> Boolean = { false }
+    /** Fork: what the chat's end says even when the person ended it: a live call's transcript tail left unsaved. */
+    private var endNotice: String? = null
     /** Fork: Send was asked for this Talk recording; told to the recorder again once it's running. */
     @Volatile private var talkSend = false
     /** Fork: Herald is out of sight now (unlike [away], which stays set until the next chat). */
@@ -273,6 +275,7 @@ class VoiceController(
         _chat.value = VoiceChatState(VoicePhase.Connecting, manual = mode == VoiceMode.Manual)
         stoppedByUser = false
         endedElsewhere = false
+        endNotice = null
         roomFloor = 0f
         noSpeechStream = null
         // A new chat listens over its replies afresh, even one that starts by answering a question already asked.
@@ -328,7 +331,7 @@ class VoiceController(
                 // (Android host tests have no resources) it ends as if hung up, as before.
                 val why = if (endedElsewhere) withContext(NonCancellable) { runCatching { getString(Res.string.voice_error_ended_elsewhere) }.getOrNull() } else null
                 if (chatJob == null || chatJob === coroutineContext.job) {
-                    _chat.update { VoiceChatState(error = why ?: it.error.takeUnless { stoppedByUser }) }
+                    _chat.update { VoiceChatState(error = why ?: it.error.takeUnless { stoppedByUser } ?: endNotice) }
                 }
             }
         }
@@ -587,7 +590,16 @@ class VoiceController(
             // A chat started again on this screen meanwhile has its own call and panel; this one leaves them be.
             if (live === conversation) live = null
             val mine = currentCoroutineContext().job
-            if (chatJob == null || chatJob === mine) _chat.value = VoiceChatState(error = error.takeUnless { stoppedByUser })
+            // Fork: the call's last transcript pieces were tried once more as it ended; any still unsaved are said,
+            // a hang-up too, since they're gone with the call.
+            val unsaved = if (recording?.saved == false) {
+                withContext(NonCancellable) { runCatching { getString(Res.string.voice_error_transcript_tail_unsaved) }.getOrNull() } ?: TRANSCRIPT_TAIL_UNSAVED
+            } else null
+            // A newer chat on this screen keeps its own panel and notice.
+            if (chatJob == null || chatJob === mine) {
+                endNotice = unsaved
+                _chat.value = VoiceChatState(error = error.takeUnless { stoppedByUser } ?: unsaved)
+            }
         }
         return true
     }
@@ -1513,6 +1525,7 @@ class VoiceController(
         const val HEADSET_LOST = "Your earphones disconnected, so the voice chat stopped instead of playing on the phone's speaker."
         const val HEADSET_MIC_UNAVAILABLE = "Your earphones' microphone can't be used here, so the phone's microphone is listening."
         const val NOTHING_HEARD = "Didn't catch anything."
+        const val TRANSCRIPT_TAIL_UNSAVED = "The end of this call's transcript couldn't be saved on the phone."
         const val TRANSCRIPT_UNREADABLE = "Some earlier live call transcript in this chat couldn't be read. It's kept on the phone as it was."
         const val LIVE_UNAVAILABLE = "Live voice isn't set up for this profile on your gateway. Turn Phone Live off to use Talk."
 

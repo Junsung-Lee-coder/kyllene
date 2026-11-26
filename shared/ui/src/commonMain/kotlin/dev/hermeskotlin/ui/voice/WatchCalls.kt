@@ -222,7 +222,10 @@ class WatchCalls(
         }
         // Hung up on the watch: nothing to tell. Otherwise ("stop" said, the call dropped, the watch gone quiet)
         // it's told, in case it's still there.
-        if (!held.hungUp) end(if (held.lost) getString(Res.string.watch_call_lost) else error?.let(::briefError))
+        // Fork: the call's last transcript pieces were tried once more as it ended; any still unsaved are told too.
+        val unsaved = if (recording?.saved == false) getString(Res.string.voice_error_transcript_tail_unsaved) else null
+        val why = if (held.hungUp) null else if (held.lost) getString(Res.string.watch_call_lost) else error?.let(::briefError)
+        if (!held.hungUp || unsaved != null) end(listOfNotNull(why, unsaved).joinToString(" ").ifEmpty { null })
     }
 
     /** The watch's call as [LiveConversation] sees it: the model's events come from the watch, and go back to it. */

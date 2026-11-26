@@ -92,4 +92,5 @@
     <!-- Fork: live call transcripts kept on the phone. -->
     <string name="voice_error_transcript_unsaved">A hívás átirata még nem menthető a telefonra; megtartjuk, és újra megpróbáljuk.</string>
     <string name="voice_error_transcript_unreadable">A csevegés egy korábbi élő hívásának átiratából egy rész nem olvasható. Változatlanul a telefonon marad.</string>
+    <string name="voice_error_transcript_tail_unsaved">A hívás átiratának vége nem menthető a telefonra.</string>
 </resources>

@@ -195,16 +195,22 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      with them: the gateway's `voice-live/session` takes the chat's history, and the earlier calls go in it where they
      happened among the chat's messages (`withEarlierCalls`), each once; that history keeps the newest that fit, as
      before. Another session's or another account's calls never go in. Nothing is made up from summaries or Talk.
-   - The same timed piece told twice is kept once. A piece that can't be sealed or written waits in memory and is
-     tried again, and the voice panel (or the watch) says so once; a transcript event that can't be read is kept as
-     it came, never used as context. Pieces that can't be read later (a lost key) stay on disk, and the panel says so.
+   - The same timed piece told twice is kept once. A piece that can't be sealed or written waits in memory, never in
+     the clear, and is tried again with every later piece, an empty one, and the call's end; the voice panel (or the
+     watch) says so once. Whatever still can't be saved when the call ends is said then, a hang-up too ("The end of
+     this call's transcript couldn't be saved on the phone."): it's gone with the call, and nothing survives the app
+     being killed before it's written. A transcript event that can't be read is kept as it came, never used as
+     context. Pieces that can't be read later (a lost key) stay on disk, and the panel says so.
    - Code: `core/custom/LiveTranscripts.kt` (the table, its own Room database, the store, `withEarlierCalls`), its
      builders (`androidMain`/`jvmMain`), `PlatformModule.android.kt`, `LiveConversation` (`recording`, `earlier`),
      `VoiceController.startLive`, `WatchCalls.run`, and `ChatViewModel`/`PhoneCallModel`/`WearModule`/`UiModule`
-     passing the store. Two strings, in every language.
+     passing the store. Three strings, in every language.
    - Tests: `core/custom/LiveTranscriptsDatabaseTest.kt` (the real Room database and sealer: after closing, apart by
      account, gateway and session, a call's session found later, saved-chat deletion, duplicates, writes and seals that
-     fail then work, unreadable pieces), `core/custom/LiveContinuityTest.kt`, and `ui/voice/LiveTranscriptsCallTest.kt`
+     fail then work, unreadable pieces), `core/custom/LiveTranscriptsFinalFlushTest.kt` (the last pieces sealed by the
+     final or an empty flush, in order; a sealer that never recovers: nothing in the clear, no loop),
+     `ui/voice/LiveTranscriptsEndTest.kt` (a phone call's end writes them, or says what couldn't be),
+     `core/custom/LiveContinuityTest.kt`, and `ui/voice/LiveTranscriptsCallTest.kt`
      (the real controller, and `WatchCalls` over the real `WatchRelay`: fixture events kept and given to the next
      call's history only in the same account and session).
    - Not covered: a transcript browser, and anything the gateway itself keeps.
