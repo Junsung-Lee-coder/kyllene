@@ -209,6 +209,30 @@ class AndroidVoiceRecorderTest {
         close()
     }
 
+    /**
+     * Fork: a Talk recording of quiet input (a soft voice the detector never flags) runs until it's finished, and
+     * finished by Send it's kept, to be written down, rather than counted as nothing.
+     */
+    @Test fun aQuietTalkRecordingRunsUntilSentAndIsKept() = runBlocking {
+        mode = "pcm"
+        var flagged = false
+        val recorder = AndroidVoiceRecorder()
+        val recording = async(Dispatchers.Default) { recorder.record(MANUAL_TALK, onSpeech = { flagged = true }) }
+        try {
+            // Well past Desktop's pause, idle wait and a second of audio: still recording.
+            withTimeout(2_000) { while (reads.get() < 200) delay(5) }
+            assertFalse(recording.isCompleted)
+            recorder.finish()
+            val audio = withTimeout(2_000) { recording.await() }
+            assertFalse(flagged, "the detector flagged silence as speech")
+            assertTrue(audio.heardSpeech, "a recording sent on purpose was counted as nothing")
+            assertTrue(audio.bytes.size > 44 + 16_000 * 2 / 4)
+            assertEquals(1, released.get())
+        } finally {
+            recording.cancelAndJoin()
+        }
+    }
+
     @Test fun silentPcmKeepsTheExistingDuration() = checkPcm("pcm")
     @Test fun partialReadsKeepTheSameDuration() = checkPcm("partial")
     @Test fun emptyReadsBetweenPcmFramesRecover() = checkPcm("gapped")

@@ -221,8 +221,11 @@ internal fun label(state: VoiceChatState): String = when (state.phase) {
     VoicePhase.Off -> ""
 }
 
-/** The chained chat has heard you: what's said so far can go now, without waiting for the pause. */
-internal fun canSendNow(state: VoiceChatState) = !state.live && state.phase == VoicePhase.Listening && state.hearing
+/**
+ * The chained chat has heard you: what's said so far can go now, without waiting for the pause. Fork: Talk's recording
+ * can go from its start, heard or not, since only Send ends it; a quiet voice may never trip the detector.
+ */
+internal fun canSendNow(state: VoiceChatState) = !state.live && state.phase == VoicePhase.Listening && (state.hearing || state.manual)
 
 /** What to do now, while there are no words to show; [hintText] words it. */
 internal enum class VoiceHint { Unmute, Connecting, Working, TalkOver, Skip, SendNow, JustTalk, Ready, TapSend }

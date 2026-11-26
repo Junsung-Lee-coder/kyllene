@@ -132,6 +132,7 @@ class PhoneVoiceControlsTest {
         val voice = VoiceController(audio(), QuietRecorder(), EarphonePlayer(), backgroundScope, backgroundScope)
         var starts = 0
         VoiceButton.bind(this, voice) { starts++ }
+        VoiceButton.resumed(this, true)
 
         assertTrue(down(100))
         // The same press told again (by the activity and the session), held (repeats) and let go: still one.
@@ -182,13 +183,17 @@ class PhoneVoiceControlsTest {
         val voice = VoiceController(audio(), QuietRecorder(), EarphonePlayer(), backgroundScope, backgroundScope)
         var starts = 0
         VoiceButton.bind(this, voice) { starts++ }
+        VoiceButton.resumed(this, true)
         voice.readAloud("reply-1", "Here is the summary.", gateway, null)
         assertEquals("reply-1", voice.reading.value.key)
 
         assertFalse(down(100))
         assertFalse(up(100))
         assertEquals(0, starts)
+        // Fork: the voice session isn't held meanwhile, so Read aloud's own session gets the button.
+        assertFalse(VoiceButton.holding.first())
         voice.stopReading()
+        assertTrue(VoiceButton.holding.first())
     }
 
     @Test

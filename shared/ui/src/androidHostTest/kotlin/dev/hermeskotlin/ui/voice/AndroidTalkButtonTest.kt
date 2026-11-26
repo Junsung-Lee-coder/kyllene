@@ -53,8 +53,13 @@ class AndroidTalkButtonTest {
         val buttons = VoiceMediaSession(context, backgroundScope)
         try {
             testScheduler.runCurrent()
-            // Voice off: the button stays with music and Read aloud.
+            // Voice off, the chat not resumed: the button stays with music and Read aloud.
             assertFalse(buttons.active)
+            // Resumed: held for the chat, voice still off and nothing recording.
+            VoiceButton.resumed(this, true)
+            testScheduler.runCurrent()
+            assertTrue(buttons.active)
+            assertEquals(0, recorder.recordings.value)
 
             // In front, the activity's key: Talk records at once.
             assertTrue(voiceKeyEvent(key(KeyEvent.KEYCODE_HEADSETHOOK, KeyEvent.ACTION_DOWN, 100)))
@@ -64,13 +69,69 @@ class AndroidTalkButtonTest {
             testScheduler.runCurrent()
             assertTrue(buttons.active)
 
-            // Out of sight now, through the session: the press sends it, and the reply is read.
+            // Out of sight now, through the session: the press sends it (heard or not), and the reply is read.
+            VoiceButton.resumed(this, false)
             voice.onBackground()
             assertTrue(buttons.mediaButton(button(key(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.ACTION_DOWN, 200))))
             assertTrue(buttons.mediaButton(button(key(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.ACTION_UP, 200))))
             socket.submits.first { it.size == 1 }
             socket.reply("Dimming.")
             check(voice, recorder, socket, buttons)
+        } finally {
+            buttons.close()
+            voice.stopChat()
+        }
+    }
+
+    @Test
+    fun aResumedChatHoldsTheButtonWithVoiceOffAndOnePressToldTwiceStartsTalkOnce() = runTest {
+        val gateway = Gateway()
+        val socket = Socket()
+        val session = talkSession(gateway, socket)
+        val recorder = Recorder(hears = { false })
+        val voice = VoiceController(
+            gateway.audio, recorder, Player(), backgroundScope, backgroundScope,
+            keepAlive = KeepAlive(), speechStreams = { _, _ -> null }, liveCalls = LiveCalls { null },
+        )
+        var starts = 0
+        VoiceButton.bind(this, voice) {
+            starts++
+            voice.startChat(session, TalkFixtures.gateway, "rin", mode = VoiceMode.Manual)
+        }
+        val buttons = VoiceMediaSession(context, backgroundScope)
+        try {
+            VoiceButton.resumed(this, true)
+            testScheduler.runCurrent()
+            assertTrue(buttons.active)
+            // Holding the button opened nothing.
+            assertEquals(0, recorder.recordings.value)
+            assertEquals(VoicePhase.Off, voice.chat.value.phase)
+
+            // A Bluetooth press handed to the session, and the same press to the activity: one start.
+            val down = key(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.ACTION_DOWN, 100)
+            assertTrue(buttons.mediaButton(button(down)))
+            assertTrue(voiceKeyEvent(down))
+            assertTrue(buttons.mediaButton(button(key(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.ACTION_UP, 100))))
+            recorder.recordings.first { it == 1 }
+            assertEquals(1, starts)
+            // Not flagged as heard: the next press sends it all the same, once.
+            voice.chat.first { it.phase == VoicePhase.Listening }
+            assertTrue(buttons.mediaButton(button(key(KeyEvent.KEYCODE_HEADSETHOOK, KeyEvent.ACTION_DOWN, 200))))
+            assertTrue(voiceKeyEvent(key(KeyEvent.KEYCODE_HEADSETHOOK, KeyEvent.ACTION_DOWN, 200)))
+            socket.submits.first { it.size == 1 }
+            assertEquals(1, recorder.finishes.value)
+            socket.reply("Dimming.")
+            voice.chat.first { it.phase == VoicePhase.Ready }
+            voice.stopChat()
+            voice.chat.first { it.phase == VoicePhase.Off }
+
+            // Paused with voice off: let go, and a press told to it anyway goes where it would.
+            VoiceButton.resumed(this, false)
+            testScheduler.runCurrent()
+            assertFalse(buttons.active)
+            assertFalse(voiceKeyEvent(key(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.ACTION_DOWN, 300)))
+            assertEquals(1, starts)
+            assertEquals(1, recorder.recordings.value)
         } finally {
             buttons.close()
             voice.stopChat()

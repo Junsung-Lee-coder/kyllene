@@ -35,14 +35,17 @@ class ManualTalkTest {
         live: Boolean = false,
         start: VoiceMode? = VoiceMode.Manual,
         readyAway: () -> Boolean = { false },
+        transcript: String = "Turn the lights down",
     ): Talk {
-        val gateway = Gateway(live)
+        val gateway = Gateway(live, transcript)
         val socket = Socket()
         val session = talkSession(gateway, socket)
         val player = Player()
         val keepAlive = KeepAlive()
         val voice = VoiceController(gateway.audio, recorder, player, backgroundScope, backgroundScope, keepAlive = keepAlive, speechStreams = { _, _ -> null }, liveCalls = LiveCalls { null })
         VoiceButton.bind(this, voice) { voice.startChat(session, TalkFixtures.gateway, "rin", mode = VoiceMode.Manual, readyAway = readyAway) }
+        // The chat is in front.
+        VoiceButton.resumed(this, true)
         if (start != null) voice.startChat(session, TalkFixtures.gateway, "rin", mode = start, readyAway = readyAway)
         return Talk(voice, socket, gateway, recorder, player, keepAlive)
     }
@@ -131,8 +134,8 @@ class ManualTalkTest {
     }
 
     @Test
-    fun theEarphonesStartSendRecordAgainAndDropAQuietRecording() = runTest {
-        // The second recording never hears anyone.
+    fun theEarphonesStartSendRecordAgainAndSendAQuietRecording() = runTest {
+        // The second recording never trips the speech detector (a quiet voice, a low headset microphone).
         val talk = talk(Recorder(hears = { it != 2 }), start = null)
         var at = 100L
         fun press() = VoiceButton.press(VoiceKey.PlayPause, true, 0, at++, 7)
@@ -150,11 +153,15 @@ class ManualTalkTest {
         assertTrue(press())
         talk.recorder.recordings.first { it == 2 }
         talk.voice.chat.first { it.phase == VoicePhase.Listening }
-        // Nothing heard: the press drops it, and Talk is Ready again.
+        // Not flagged as heard: the press still ends and sends it, once; only End drops a recording.
+        assertFalse(talk.voice.chat.value.hearing)
         assertTrue(press())
+        talk.socket.submits.first { it.size == 2 }
+        assertEquals(0, talk.recorder.dropped.value)
+        talk.socket.reply("Done.")
         talk.voice.chat.first { it.phase == VoicePhase.Ready }
-        assertEquals(1, talk.socket.submits.value.size)
-        assertEquals(1, talk.recorder.dropped.value)
+        assertEquals(2, talk.socket.submits.value.size)
+        assertEquals(2, talk.gateway.paths.count { it == "/api/audio/transcribe" })
         talk.voice.stopChat()
     }
 
@@ -163,7 +170,8 @@ class ManualTalkTest {
         val manual = VoiceChatState(manual = true)
         assertEquals(VoicePress.Talk, voicePress(manual.copy(phase = VoicePhase.Ready), canStart = true))
         assertEquals(VoicePress.Send, voicePress(manual.copy(phase = VoicePhase.Listening, hearing = true), canStart = true))
-        assertEquals(VoicePress.End, voicePress(manual.copy(phase = VoicePhase.Listening), canStart = true))
+        // Recording, heard or not: the press sends.
+        assertEquals(VoicePress.Send, voicePress(manual.copy(phase = VoicePhase.Listening), canStart = true))
         assertEquals(VoicePress.End, voicePress(manual.copy(phase = VoicePhase.Transcribing), canStart = true))
         assertEquals(VoicePress.End, voicePress(manual.copy(phase = VoicePhase.Thinking), canStart = true))
         assertEquals(VoicePress.End, voicePress(manual.copy(phase = VoicePhase.Speaking), canStart = true))
@@ -236,6 +244,118 @@ class ManualTalkTest {
         assertEquals(0, talk.recorder.recordings.value)
         assertTrue(talk.socket.submits.value.isEmpty())
         assertTrue("/api/audio/voice-live/status" in talk.gateway.paths)
+    }
+
+    @Test
+    fun sendIsOfferedFromTheRecordingsStartAndSendsAQuietOneExactlyOnce() = runTest {
+        val talk = talk(Recorder(hears = { false }))
+        talk.recorder.recordings.first { it == 1 }
+        val recording = talk.voice.chat.first { it.phase == VoicePhase.Listening }
+        // Nothing flagged as speech, yet Send is there (the panel's and the screen's right slot) and the hint says so.
+        assertFalse(recording.hearing)
+        assertTrue(canSendNow(recording))
+        assertEquals(VoiceHint.TapSend, hint(recording))
+        advanceTimeBy(5 * 60_000L)
+        testScheduler.runCurrent()
+        assertTrue(talk.socket.submits.value.isEmpty())
+
+        talk.voice.sendNow()
+        // A second tap while it's written down sends nothing more.
+        talk.voice.sendNow()
+        talk.socket.submits.first { it.size == 1 }
+        talk.socket.reply("Dimming.")
+        talk.voice.chat.first { it.phase == VoicePhase.Ready }
+        testScheduler.runCurrent()
+        assertEquals(1, talk.socket.submits.value.size)
+        assertEquals(1, talk.gateway.paths.count { it == "/api/audio/transcribe" })
+        assertEquals(1, talk.recorder.recordings.value)
+        assertEquals(0, talk.recorder.dropped.value)
+        talk.voice.stopChat()
+    }
+
+    @Test
+    fun anEmptyTranscriptIsReadyAgainWithNothingSent() = runTest {
+        val talk = talk(Recorder(hears = { false }), transcript = "")
+        talk.recorder.recordings.first { it == 1 }
+        talk.voice.chat.first { it.phase == VoicePhase.Listening }
+        talk.voice.sendNow()
+        val ready = talk.voice.chat.first { it.phase == VoicePhase.Ready }
+        testScheduler.runCurrent()
+        assertTrue(talk.socket.submits.value.isEmpty(), "a request was made up from nothing")
+        assertEquals(1, talk.gateway.paths.count { it == "/api/audio/transcribe" })
+        assertNotNull(ready.error, "it didn't say it caught nothing")
+        assertEquals(1, talk.recorder.recordings.value)
+        talk.voice.stopChat()
+    }
+
+    @Test
+    fun aRecordingWithNothingInItIsReadyAgainWithoutBeingWrittenDown() = runTest {
+        val talk = talk(Recorder(hears = { false }, keeps = false))
+        talk.recorder.recordings.first { it == 1 }
+        talk.voice.chat.first { it.phase == VoicePhase.Listening }
+        talk.voice.sendNow()
+        talk.voice.chat.first { it.phase == VoicePhase.Ready }
+        testScheduler.runCurrent()
+        assertFalse("/api/audio/transcribe" in talk.gateway.paths)
+        assertTrue(talk.socket.submits.value.isEmpty())
+        talk.voice.stopChat()
+    }
+
+    @Test
+    fun aSendBeforeTheRecorderHasStartedIsNotLost() = runTest {
+        // A recorder forgets a finish asked before it runs; the controller tells it again at its first level.
+        val talk = talk(Recorder(hears = { false }), start = null)
+        assertTrue(VoiceButton.press(VoiceKey.PlayPause, true, 0, 100, 7))
+        // Listening is shown just before the recorder starts: Send right then.
+        talk.voice.chat.first { it.phase == VoicePhase.Listening }
+        assertEquals(0, talk.recorder.recordings.value, "the recorder had started already")
+        talk.voice.sendNow()
+        talk.socket.submits.first { it.size == 1 }
+        assertEquals(1, talk.recorder.recordings.value)
+        talk.voice.stopChat()
+    }
+
+    @Test
+    fun endStillDropsAQuietRecordingUnsent() = runTest {
+        val talk = talk(Recorder(hears = { false }))
+        talk.recorder.recordings.first { it == 1 }
+        talk.voice.chat.first { it.phase == VoicePhase.Listening }
+        talk.voice.end()
+        talk.voice.chat.first { it.phase == VoicePhase.Ready }
+        testScheduler.runCurrent()
+        assertEquals(1, talk.recorder.dropped.value)
+        assertEquals(0, talk.recorder.finishes.value)
+        assertFalse("/api/audio/transcribe" in talk.gateway.paths)
+        assertTrue(talk.socket.submits.value.isEmpty())
+        talk.voice.stopChat()
+    }
+
+    @Test
+    fun theButtonIsHeldForAResumedChatAndHoldingItRecordsNothing() = runTest {
+        val talk = talk(start = null)
+        VoiceButton.resumed(this, false)
+        assertFalse(VoiceButton.holding.first())
+        // Resumed, voice off: held for Talk, and nothing opens the microphone.
+        VoiceButton.resumed(this, true)
+        assertTrue(VoiceButton.holding.first())
+        advanceTimeBy(60_000L)
+        testScheduler.runCurrent()
+        assertEquals(0, talk.recorder.recordings.value)
+        assertEquals(VoicePhase.Off, talk.voice.chat.value.phase)
+        // Paused, voice off: let go, and a press goes where it would.
+        VoiceButton.resumed(this, false)
+        assertFalse(VoiceButton.holding.first())
+        assertFalse(VoiceButton.press(VoiceKey.PlayPause, true, 0, 900, 7))
+        assertEquals(0, talk.recorder.recordings.value)
+        // In front again, a press starts Talk, and the button stays held with voice on, out of sight too.
+        VoiceButton.resumed(this, true)
+        assertTrue(VoiceButton.press(VoiceKey.PlayPause, true, 0, 1_000, 7))
+        talk.recorder.recordings.first { it == 1 }
+        VoiceButton.resumed(this, false)
+        assertTrue(VoiceButton.holding.first())
+        talk.voice.stopChat()
+        talk.voice.chat.first { it.phase == VoicePhase.Off }
+        assertFalse(VoiceButton.holding.first())
     }
 
     @Test

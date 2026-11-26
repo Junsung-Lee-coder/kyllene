@@ -80,7 +80,12 @@ internal object TalkFixtures {
      * Records until it's told to finish (Send), whatever the [VoiceActivity] says: so a Talk recording that a pause or a
      * limit ended would show as the test's own finish never being needed. [hears] says whether recording n hears you.
      */
-    class Recorder(private val hears: (Int) -> Boolean = { true }) : VoiceRecorder {
+    class Recorder(
+        private val hears: (Int) -> Boolean = { true },
+        /** Whether a recording finished by Send has anything in it (the real recorder: a quarter second or more). */
+        private val keeps: Boolean = true,
+    ) : VoiceRecorder {
+        val finishes = MutableStateFlow(0)
         val activities = mutableListOf<VoiceActivity>()
         val recordings = MutableStateFlow(0)
         val dropped = MutableStateFlow(0)
@@ -93,16 +98,19 @@ internal object TalkFixtures {
             val n = recordings.value + 1
             recordings.value = n
             if (hears(n)) onSpeech()
+            // As the real recorders do from their first frame on.
+            onLevel(0f)
             try {
                 done.await()
             } catch (e: CancellationException) {
                 dropped.update { it + 1 }
                 throw e
             }
-            return Recording(byteArrayOf(1, 2, 3), "audio/wav", heardSpeech = true)
+            return Recording(byteArrayOf(1, 2, 3), "audio/wav", heardSpeech = keeps)
         }
 
         override fun finish() {
+            finishes.update { it + 1 }
             finished?.complete(Unit)
         }
     }
@@ -137,7 +145,7 @@ internal object TalkFixtures {
     }
 
     /** What the gateway was asked over REST, by path. */
-    class Gateway(val live: Boolean = false) {
+    class Gateway(val live: Boolean = false, transcript: String = "Turn the lights down") {
         val paths = mutableListOf<String>()
         val client = createHttpClient(
             MockEngine { request ->
@@ -147,7 +155,7 @@ internal object TalkFixtures {
                     "/api/auth/ws-ticket" -> respond("""{"ticket":"T","ttl_seconds":30}""", HttpStatusCode.OK, json)
                     // Talk-over on: Talk listens over nothing all the same.
                     "/api/config" -> respond("""{"voice":{"barge_in":true}}""", HttpStatusCode.OK, json)
-                    "/api/audio/transcribe" -> respond("""{"ok":true,"transcript":"Turn the lights down"}""", HttpStatusCode.OK, json)
+                    "/api/audio/transcribe" -> respond("""{"ok":true,"transcript":"$transcript"}""", HttpStatusCode.OK, json)
                     "/api/audio/voice-live/status" ->
                         respond(if (live) """{"mode":"gpt-live","available":true}""" else """{"mode":"chained","available":false}""", HttpStatusCode.OK, json)
                     "/api/audio/speak" -> respond("""{"data_url":"data:audio/mpeg;base64,AAAA","mime_type":"audio/mpeg"}""", HttpStatusCode.OK, json)

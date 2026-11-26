@@ -240,6 +240,8 @@ class VoiceController(
     private var talkTurn: Job? = null
     /** Fork: whether Talk stays Ready, holding the microphone service and the button, with Herald out of sight. */
     private var readyAway: () -> Boolean = { false }
+    /** Fork: Send was asked for this Talk recording; told to the recorder again once it's running. */
+    @Volatile private var talkSend = false
     /** Fork: Herald is out of sight now (unlike [away], which stays set until the next chat). */
     private var outOfSight = false
 
@@ -493,6 +495,7 @@ class VoiceController(
             }
             presses.receive()
         }
+        talkSend = false
         // The earphones take this request as they take a chained chat; nothing was routed while it waited.
         if (chainedAudio == null) {
             val chat = chatJob
@@ -502,6 +505,18 @@ class VoiceController(
                 _chat.update { it.copy(error = why) }
             }
         }
+    }
+
+    /**
+     * Fork: nothing to send. Talk was sent on purpose, so it says it caught nothing, and is Ready again with nothing
+     * sent; the chained chat listens again quietly, as before.
+     */
+    private suspend fun talkSilence(): Heard {
+        if (talkPresses != null) {
+            val why = runCatching { getString(Res.string.voice_error_nothing_heard) }.getOrNull() ?: NOTHING_HEARD
+            _chat.update { it.copy(error = why) }
+        }
+        return Heard.Silence
     }
 
     private fun closeTalkAudio() {
@@ -607,7 +622,10 @@ class VoiceController(
      */
     fun sendNow() {
         // As the button shows: once it has heard you, so the recording is under way and has something to send.
+        // Fork: Talk's recording can be sent from its start, heard or not.
         if (!canSendNow(_chat.value) || chatJob?.isActive != true) return
+        // Fork: a Send that lands before Talk's recording has started finishes it once it does (its first level).
+        if (_chat.value.manual) talkSend = true
         recorder.finish()
     }
 
@@ -945,7 +963,11 @@ class VoiceController(
                 unlessMuted({ null }) {
                     recorder.record(
                         activity,
-                        onLevel = { level -> _chat.update { it.copy(level = level) } },
+                        onLevel = { level ->
+                            // Fork: Send asked for before the recorder started, which forgets it then.
+                            if (talkSend) recorder.finish()
+                            _chat.update { it.copy(level = level) }
+                        },
                         onSpeech = { _chat.update { it.copy(hearing = true) } },
                     )
                 }
@@ -957,7 +979,7 @@ class VoiceController(
             }
             // Cut off by Mute: the sentence is dropped, and it listens afresh once unmuted.
             if (recording == null) continue
-            if (!recording.heardSpeech) return Heard.Silence
+            if (!recording.heardSpeech) return talkSilence()
             _chat.update { it.copy(phase = VoicePhase.Transcribing, level = 0f, hearing = false) }
             val transcript = when (val result = audio.transcribe(gateway, recording.bytes, recording.mimeType, profile)) {
                 is ApiResult.Success -> result.value
@@ -970,7 +992,7 @@ class VoiceController(
             if (_chat.value.muted) continue
             // From here, an error on show is this turn's own.
             _chat.update { it.copy(error = null) }
-            return if (transcript.isBlank()) Heard.Silence else Heard.Words(transcript)
+            return if (transcript.isBlank()) talkSilence() else Heard.Words(transcript)
         }
     }
 
@@ -1470,6 +1492,7 @@ class VoiceController(
         /** Fork: the words where the catalogue can't be read (host tests); the app says them in its language. */
         const val HEADSET_LOST = "Your earphones disconnected, so the voice chat stopped instead of playing on the phone's speaker."
         const val HEADSET_MIC_UNAVAILABLE = "Your earphones' microphone can't be used here, so the phone's microphone is listening."
+        const val NOTHING_HEARD = "Didn't catch anything."
         const val LIVE_UNAVAILABLE = "Live voice isn't set up for this profile on your gateway. Turn Phone Live off to use Talk."
 
         const val MAX_FAILURES = 3

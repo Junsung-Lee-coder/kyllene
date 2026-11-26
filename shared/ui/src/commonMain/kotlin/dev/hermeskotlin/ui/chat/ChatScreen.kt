@@ -511,11 +511,15 @@ fun ChatScreen(
             else -> notice = noDesktopVoice
         }
     }
+    val buttonOwner = remember { Any() }
     DisposableEffect(viewModel) {
-        val owner = Any()
-        VoiceButton.bind(owner, viewModel.voice) { startFromButton() }
-        onDispose { VoiceButton.unbind(owner) }
+        VoiceButton.bind(buttonOwner, viewModel.voice) { startFromButton() }
+        onDispose { VoiceButton.unbind(buttonOwner) }
     }
+    // Fork: while this chat is resumed, the button is held for it, voice off too; paused, it goes back unless voice is on.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { VoiceButton.resumed(buttonOwner, true) }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { VoiceButton.resumed(buttonOwner, false) }
+    DisposableEffect(Unit) { onDispose { VoiceButton.resumed(buttonOwner, false) } }
     // Turning the phone rebuilds the screen without leaving it: the voice the chat owns plays on through it.
     val changingConfigurations = rememberChangingConfigurations()
     // Dictation stops when the app leaves the screen; a voice chat goes on like a call (VoiceController.onBackground).

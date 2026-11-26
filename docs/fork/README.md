@@ -113,11 +113,14 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      call with music-only earbuds plays on the phone's speaker, as stock does; that isn't covered yet.
    - Play, pause, play/pause, the headset hook and stop are one toggle: start the chat's voice (as `/voice` does),
      send what the chained chat heard, or end a live call or the chat. One press counts once; the next press is its
-     own. In front, the activity takes the keys it's given (`onKeyDown`/`onKeyUp`), before any media session, so a
-     press with the chat on screen starts voice rather than playing or pausing music. Android's documentation gives
-     the foreground activity media keys first; which keys a Bluetooth headset sends it is untested on a device. With
-     voice on, a media session is active for them, out of sight too. Read aloud keeps the button while it reads, and
-     other keys go on as before.
+     own. With a chat screen resumed, a press starts voice rather than playing or pausing music, whichever way
+     Android hands it over: the activity takes the keys it's given (`onKeyDown`/`onKeyUp`), and the voice media
+     session is active for the chat, voice off too (`VoiceButton.holding`). The same press told both ways counts once.
+     Holding the button opens no microphone. Paused with voice off, the session lets go, and voice never starts from
+     a press out of sight. With voice on, the session stays active, out of sight too. Read aloud keeps the button
+     while it reads (the voice session isn't active then), and other keys go on as before. Which way a Bluetooth
+     headset's press actually arrives, and whether Android routes it to the session over a music app, is untested on
+     a device.
    - Rules: `shared/core/.../custom/HeadsetAudio.kt` (route) and `shared/ui/.../voice/VoiceButton.kt` (toggle).
      Seams: `SpeechPlayer.chainedChatAudio(talkOver, onHeadsetLost)` and `headsetMicUnavailable()` (`Speech.kt`),
      their Android player (`AndroidVoice.kt`), `AndroidLiveCall.kt`'s headset watch, `VoiceController.converseChained`
@@ -134,8 +137,10 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
    - Settings › Voice has two new switches under Default Call target, both off by default. Turning either on or off
      starts nothing: no microphone, no call.
    - **Phone Live off: Talk.** The Voice button, the earphones' button and Call Hermes record one request. No pause,
-     silence or time limit ends it. Send, or an earphone press once it has heard you, sends it once, and its reply
-     is read as the chained chat reads one. End, or a press before it has heard anything, drops it unsent. Then the
+     silence or time limit ends it. Send (offered from the start, since a quiet voice may never trip the speech
+     detector) or an earphone press ends it and sends it once, heard or not, and its reply is read as the chained
+     chat reads one. If it held nothing, or the transcript is empty, nothing is sent: the panel says it caught
+     nothing and is Ready again. Only End drops a recording unsent. Then the
      voice panel waits at Ready, its microphone shut and no audio routed, until its Mic button or an earphone press
      records the next request. End at Ready closes it. Nothing listens over the reply, and there's no Mute, since
      nothing listens unless asked. End while Hermes works or speaks stops the reply aloud (Hermes's turn isn't
@@ -164,7 +169,8 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      `SettingsScreen` rows, `WatchStore`'s default. Nine strings, in every language.
    - Tests: `ui/voice/ManualTalkTest.kt` (the real `VoiceController` on a real chat over a gateway socket, and the
      button), `androidHostTest/.../ui/voice/AndroidTalkButtonTest.kt` (the real `VoiceMediaSession` on Robolectric and
-     the activity's key path, driving the controller), and `WatchNewChatTest`'s default.
+     the activity's key path, driving the controller), `AndroidVoiceRecorderTest`'s quiet Talk recording, and
+     `WatchNewChatTest`'s default.
 
 The fork adds two switches to Settings › Voice and the Ready state to the voice panel; it doesn't otherwise change
 the settings screens or layout. The watch app changes only as described above.

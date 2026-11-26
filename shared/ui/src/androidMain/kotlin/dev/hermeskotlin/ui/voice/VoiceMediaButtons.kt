@@ -7,6 +7,7 @@ import android.media.session.PlaybackState
 import android.os.Build
 import android.view.KeyEvent
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -31,9 +32,15 @@ fun voiceKeyEvent(event: KeyEvent, press: (VoiceKey, Boolean, Int, Long, Int) ->
 }
 
 /**
- * Fork: holds the earphones' button while the chat's voice is on, so it still ends, sends or (Talk at Ready) records
- * with the app out of sight or the screen off. With the app in front, the activity gets the key first ([voiceKeyEvent]
- * from onKeyDown and onKeyUp). Inactive otherwise, so Read aloud's session and music apps keep the button as before.
+ * Fork: holds the earphones' button ([VoiceButton.holding]):
+ * - while the chat's voice is on, so it still ends, sends or (Talk at Ready) records with the app out of sight or the
+ *   screen off;
+ * - while a chat screen is resumed with voice off, so a press starts Talk rather than music, by whichever way Android
+ *   hands it over: the activity's keys ([voiceKeyEvent] from onKeyDown and onKeyUp) or this session. The same press
+ *   told both ways counts once. Becoming active starts nothing.
+ *
+ * Inactive otherwise, and while Read aloud reads with voice off, so Read aloud's session and music apps keep the
+ * button.
  *
  * Out of sight, Android sends a press to the last app with a media session that played audio
  * (https://developer.android.com/media/legacy/media-buttons): to Herald once it has just read a reply, but to music
@@ -57,14 +64,23 @@ class VoiceMediaSession(context: Context, scope: CoroutineScope) : AutoCloseable
     internal fun mediaButton(intent: Intent): Boolean = callback.onMediaButtonEvent(intent)
 
     private val following = scope.launch {
-        VoiceButton.voiceOn.distinctUntilChanged().collect { on ->
+        combine(VoiceButton.voiceOn, VoiceButton.holding) { on, holding -> on to holding }.distinctUntilChanged().collect { (on, holding) ->
             session.setPlaybackState(
                 PlaybackState.Builder()
                     .setActions(PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_STOP)
-                    .setState(if (on) PlaybackState.STATE_PLAYING else PlaybackState.STATE_STOPPED, 0L, 1f)
+                    // Voice off but held for the chat in front: ready to play, not playing.
+                    .setState(
+                        when {
+                            on -> PlaybackState.STATE_PLAYING
+                            holding -> PlaybackState.STATE_PAUSED
+                            else -> PlaybackState.STATE_STOPPED
+                        },
+                        0L,
+                        1f,
+                    )
                     .build(),
             )
-            session.isActive = on
+            session.isActive = holding
         }
     }
 
