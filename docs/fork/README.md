@@ -113,17 +113,15 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      call with music-only earbuds plays on the phone's speaker, as stock does; that isn't covered yet.
    - Play, pause, play/pause, the headset hook and stop are one toggle: start the chat's voice (as `/voice` does),
      send what the chained chat heard, or end a live call or the chat. One press counts once; the next press is its
-     own. In front, the activity takes the keys it's given (`onKeyDown`/`onKeyUp`): wired and USB headset keys. With
-     voice on, a media session is active for them, out of sight too. Bluetooth earbud presses normally go to a media
-     session, so starting voice with them while voice is off, and whether the voice session wins them out of sight,
-     are untested on a device. The fork doesn't hold the button from music apps while voice is off. Read aloud keeps
-     it while it reads, and other keys go on as before.
-   - There's no manual Talk yet (a recording that only ends when you end it); the chained chat still ends a turn
-     on a pause, as stock does.
+     own. In front, the activity takes the keys it's given (`onKeyDown`/`onKeyUp`), before any media session, so a
+     press with the chat on screen starts voice rather than playing or pausing music. Android's documentation gives
+     the foreground activity media keys first; which keys a Bluetooth headset sends it is untested on a device. With
+     voice on, a media session is active for them, out of sight too. Read aloud keeps the button while it reads, and
+     other keys go on as before.
    - Rules: `shared/core/.../custom/HeadsetAudio.kt` (route) and `shared/ui/.../voice/VoiceButton.kt` (toggle).
      Seams: `SpeechPlayer.chainedChatAudio(talkOver, onHeadsetLost)` and `headsetMicUnavailable()` (`Speech.kt`),
      their Android player (`AndroidVoice.kt`), `AndroidLiveCall.kt`'s headset watch, `VoiceController.converseChained`
-     and `headsetLost`, the `ChatScreen` binding, `androidApp/.../voice/VoiceMediaButtons.kt` and two
+     and `headsetLost`, the `ChatScreen` binding, `shared/ui/src/androidMain/.../voice/VoiceMediaButtons.kt` and two
      `HeraldActivity` overrides. Two strings, in every language.
    - Tests: `core/custom/HeadsetAudioTest.kt` (the routes and the `Tracker` transitions the Android player runs),
      `ui/voice/PhoneVoiceControlsTest.kt` (the real `VoiceController`, chained and live, including one driven by the
@@ -132,7 +130,44 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      (its real `AudioTrack` and `MediaPlayer` paths after the output goes). The stock `AndroidChainedAudioTest` case for unplugged
      headphones now expects the chat silenced rather than speaker call routing.
 
-The fork doesn't change the settings screens or layout. The watch app changes only as described above.
+5. **Talk, a Phone Live switch, and the earphones' button out of sight.**
+   - Settings › Voice has two new switches under Default Call target, both off by default. Turning either on or off
+     starts nothing: no microphone, no call.
+   - **Phone Live off: Talk.** The Voice button, the earphones' button and Call Hermes record one request. No pause,
+     silence or time limit ends it. Send, or an earphone press once it has heard you, sends it once, and its reply
+     is read as the chained chat reads one. End, or a press before it has heard anything, drops it unsent. Then the
+     voice panel waits at Ready, its microphone shut and no audio routed, until its Mic button or an earphone press
+     records the next request. End at Ready closes it. Nothing listens over the reply, and there's no Mute, since
+     nothing listens unless asked. End while Hermes works or speaks stops the reply aloud (Hermes's turn isn't
+     stopped) and goes back to Ready. "Stop" said, or a microphone that fails, ends the chat as before. Earphones
+     with a microphone take each request, and losing them ends the chat, as in 4.
+   - **Phone Live on.** The same buttons start a live call. If the gateway's profile doesn't talk live, the panel
+     says so rather than starting the chained chat. Calls the agent places keep their own voice, and so does the
+     watch.
+   - **Background earphone button.** On, Talk stays at Ready when Herald leaves the screen, with its call
+     notification and media session, so an earphone press still records the next request out of sight. Off, Talk at
+     Ready ends once Herald is out of sight (a request under way finishes first), and the session lets the button
+     go to music. Limits, from Android's rules
+     ([media buttons](https://developer.android.com/media/legacy/media-buttons),
+     [background starts](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)):
+     - Out of sight, Android sends a press to the last app with a media session that played audio. Herald gets it
+       after it has just read a reply, but music that has played since takes it.
+     - Nothing starts Talk out of sight when voice is off. An app in the background can't start the microphone
+       service (apps targeting Android 12 and later), and one started from the background gets no microphone access
+       (Android 14 refuses to start it). Talk has to be started on screen first; the call notification shows it's
+       waiting.
+     - None of this is tried on a device yet.
+   - The watch's Talk live starts off. The phone's switch is separate.
+   - Code: `ui/voice/ManualTalk.kt` (the modes), `VoiceController` (`converseManual`, `awaitTalk`, `talk`, `end`,
+     `onForeground`, the Live-or-reason start, and `VoicePhase.Ready`), `VoiceButton` (Ready records), the voice
+     panel's and screen's left slot and hints, `ChatViewModel.startVoiceChat`, two `AppSettings` fields and their
+     `SettingsScreen` rows, `WatchStore`'s default. Nine strings, in every language.
+   - Tests: `ui/voice/ManualTalkTest.kt` (the real `VoiceController` on a real chat over a gateway socket, and the
+     button), `androidHostTest/.../ui/voice/AndroidTalkButtonTest.kt` (the real `VoiceMediaSession` on Robolectric and
+     the activity's key path, driving the controller), and `WatchNewChatTest`'s default.
+
+The fork adds two switches to Settings › Voice and the Ready state to the voice panel; it doesn't otherwise change
+the settings screens or layout. The watch app changes only as described above.
 
 ## Moving to a newer upstream release
 
@@ -175,6 +210,10 @@ For each conflict or failing test:
   earphones stop, never the speaker" rule for every route, the `ACTION_AUDIO_BECOMING_NOISY` receiver, and the player's
   mute on every start and resume path (`hold`, `playPcm`, `play` and its prepared callback). If it adds its own media-button handling, route these keys to
   `VoiceButton` from there instead of the fork's session.
+- **Talk.** If upstream changes `startChat`, `hear` or `converseOnce`, keep the `mode` branch before the live check,
+  `awaitTalk()` at the top of `hear`'s loop, and `MANUAL_TALK` for Talk's recordings. If it adds a `VoicePhase`, give
+  it a place in `voicePress` and the panel's label. If upstream adds its own Live switch, use theirs and drop
+  `phoneLive`.
 
 Then update the table above and run:
 
