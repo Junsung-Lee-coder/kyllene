@@ -54,6 +54,8 @@ android {
         buildConfig = true
     }
 
+    testOptions { unitTests.isIncludeAndroidResources = true }
+
     // As androidApp: WebRTC's native libraries stay compressed, so the watch app downloads smaller.
     packaging { jniLibs.useLegacyPackaging = true }
 
@@ -92,6 +94,8 @@ dependencies {
     implementation(libs.wear.compose.material3)
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.navigation)
+    // Fork: the orb reads its screen's lifecycle (OrbMotion).
+    implementation(libs.lifecycle.runtime.compose)
     implementation(libs.wear.tiles)
     // The tile answers with a ListenableFuture.
     implementation(libs.androidx.concurrent.futures)
@@ -104,4 +108,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Fork: the reply player's real MediaPlayer path, on Robolectric's shadows (OrbMotion).
+    testImplementation(libs.robolectric)
 }

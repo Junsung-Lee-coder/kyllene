@@ -10,7 +10,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -261,6 +264,7 @@ private fun TalkScreen(
     val phone by link.phone.collectAsState()
     val chat by store.chat.collectAsState()
     val speaking by speech.speaking.collectAsState()
+    val replyPlaying by speech.sounding.collectAsState()
     val mic by listening.collectAsState()
     val callState by link.call.collectAsState()
     val listState = rememberTransformingLazyColumnState()
@@ -277,6 +281,8 @@ private fun TalkScreen(
         current?.update?.phase == ReplyPhase.Failed || mic.error != null -> OrbMood.Failed
         else -> OrbMood.Idle
     }
+    // Fork (requirements §11): the orb moves only with the microphone or speaker in use, on screen.
+    val moving = orbMoves(talkMedia(mic, replyPlaying) + callMedia(call), orbShown())
     val onOrb = {
         when {
             mic.recording -> onFinishRecording()
@@ -290,7 +296,7 @@ private fun TalkScreen(
 
     if (inCall) {
         ScreenScaffold(modifier = Modifier.halo(mood, MaterialTheme.colorScheme.primaryContainer)) {
-            CallScreen(call, mood, title = chat.title ?: stringResource(if (chat.id == null) R.string.wear_new_chat else R.string.wear_chat), onMute = link::toggleMute, onEnd = link::endCall)
+            CallScreen(call, mood, moving, title = chat.title ?: stringResource(if (chat.id == null) R.string.wear_new_chat else R.string.wear_chat), onMute = link::toggleMute, onEnd = link::endCall)
         }
         return
     }
@@ -309,11 +315,12 @@ private fun TalkScreen(
             item {
                 // Smaller once there's more to show: a turn, or how a call ended.
                 val big = mic.recording || (call == null && current == null)
-                val orbSize by animateFloatAsState(if (big) 84f else 68f, tween(350), label = "orb")
+                val orbSize by animateFloatAsState(if (big) 84f else 68f, if (moving) tween(350) else snap(), label = "orb")
                 Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
                     HeraldOrb(
                         mood = mood,
                         level = mic.level,
+                        moving = moving,
                         context = chat.contextPercent?.let { it / 100f },
                         modifier = Modifier
                             .size(orbSize.dp)
@@ -357,7 +364,7 @@ private fun TalkScreen(
  * the voice is heard, and the words land in the chat. Placed by fractions of the screen, as the system's is.
  */
 @Composable
-private fun CallScreen(call: WatchCallState, mood: OrbMood, title: String, onMute: () -> Unit, onEnd: () -> Unit) {
+private fun CallScreen(call: WatchCallState, mood: OrbMood, moving: Boolean, title: String, onMute: () -> Unit, onEnd: () -> Unit) {
     val context = LocalContext.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val w = maxWidth
@@ -384,6 +391,7 @@ private fun CallScreen(call: WatchCallState, mood: OrbMood, title: String, onMut
         HeraldOrb(
             mood = mood,
             level = call.level,
+            moving = moving,
             // Where the system shows the caller's picture: a little above the buttons, clear of the time.
             modifier = Modifier.size(w * 0.24f).align(Alignment.Center).offset(y = -h * 0.06f),
         )
@@ -437,7 +445,8 @@ fun RingScreen(title: String, approval: Boolean, onDecline: () -> Unit, onAnswer
                 // Two lines end above the buttons beside the orb.
                 modifier = Modifier.align(Alignment.TopCenter).widthIn(max = w * 0.66f).offset(y = h * 0.11f),
             )
-            HeraldOrb(mood = OrbMood.Speaking, level = 0f, modifier = Modifier.size(w * 0.24f).align(Alignment.Center).offset(y = -h * 0.02f))
+            // Fork (requirements §11): still. A ring is the system's vibration and sound, not the app's speaker.
+            HeraldOrb(mood = OrbMood.Speaking, level = 0f, moving = false, modifier = Modifier.size(w * 0.24f).align(Alignment.Center).offset(y = -h * 0.02f))
             CallButton(
                 icon = R.drawable.ic_call_end,
                 label = stringResource(R.string.wear_decline),
@@ -516,6 +525,13 @@ private fun CallButton(icon: Int, label: String, color: Color, tint: Color, enab
     ) {
         Icon(painterResource(icon), contentDescription = label, modifier = Modifier.size(24.dp), tint = tint)
     }
+}
+
+/** Fork (requirements §11): the screen showing the orb is on screen and awake ([shownIn]), from its own lifecycle. */
+@Composable
+private fun orbShown(): Boolean {
+    val state by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    return shownIn(state)
 }
 
 /** The orb in a call: working while it connects or Hermes is on a request, the voice's waves, or your voice. */
@@ -763,6 +779,8 @@ fun AssistPanel(
     val phone by link.phone.collectAsState()
     val chat by store.chat.collectAsState()
     val speaking by speech.speaking.collectAsState()
+    val replyPlaying by speech.sounding.collectAsState()
+    val moving = orbMoves(talkMedia(listening, replyPlaying), orbShown())
     MaterialTheme(colorScheme = watchColors(accent)) {
         val mood = when {
             listening.recording -> OrbMood.Listening
@@ -792,6 +810,7 @@ fun AssistPanel(
             HeraldOrb(
                 mood = mood,
                 level = listening.level,
+                moving = moving,
                 context = chat.contextPercent?.takeIf { showsLast }?.let { it / 100f },
                 modifier = Modifier
                     .size(84.dp)

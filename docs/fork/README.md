@@ -291,6 +291,29 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      delete) and `wearApp/.../WatchReaderTest.kt` (restart offline, a pending account, an account switch and late
      reply, another account's page, 404, sign-out, delete with a request on its way, parts, a failed save, no answer).
 
+9. **The watch's orb moves only while its microphone or speaker is in use.**
+   - Stock, the orb's wave and arc run all the time: it breathes at Ready, circles while Hermes works or the phone is
+     waited on, and waves on the ring screen. The fork moves it only on screen (the screen's lifecycle resumed) and
+     while:
+     - Talk or the assistant records (`Listening.recording`, the recorder's run);
+     - a reply sounds (`SpeechOut.sounding`, new: a clip's player started and not yet done, or the watch's own voice
+       between its start and end; not while the next clip is on its way);
+     - in a live call, the voice is heard (the call's inbound audio level) or your voice is picked up (the
+       microphone's level, unmuted, at the recorder's speech level or above).
+   - Otherwise it's drawn still on the frame it stopped at, and asks for no frames: at Ready, while Hermes works or the
+     phone is waited on, while a call starts or connects (its ringback too), in a call where nobody is heard, on the
+     ring screen (a ring is the system's vibration and sound), and when the watch goes ambient, the app is covered or
+     the screen is off. A change of mood, context or orb size then shows at once instead of fading. Colours, layout
+     and controls are unchanged.
+   - Nothing here starts, stops or holds a recording, a reply's voice or a call. What stops when the app leaves the
+     screen is as stock: `MainActivity.onStop` ends a recording and a call, and a reply's voice plays on.
+   - Code: `wearApp/.../OrbMotion.kt` (the rule), `SpeechOut.sounding`, `HeraldOrb`'s `moving` (its clock runs only
+     then), and the talk, call, ring and assistant screens in `WatchUi.kt`.
+   - Tests: `wearApp/.../OrbMotionTest.kt` (recording through `recordAsk`, a failed microphone, a reply sounding or
+     waiting, call stages and levels, ambient, hidden and resumed on a lifecycle) and `SpeechOutPlayingTest.kt`
+     (`SpeechOut` on Robolectric's MediaPlayer: preparing, playing, between clips, stopped; a clip plays on while the
+     orb is still). How smooth it looks and what it saves in frames or battery are untested.
+
 The fork adds two switches to Settings › Voice and the Ready state to the voice panel; it doesn't otherwise change
 the settings screens or layout. The watch app changes only as described above, the reader and its settings row
 included.
@@ -347,6 +370,9 @@ For each conflict or failing test:
 - **Watch reader.** Keep `/herald/history` and the `PhoneStatus` fields optional. If upstream adds its own watch
   reader (as PR #370 proposed), compare before dropping the fork's: keep the account key on every page and in the
   status, whole messages in parts, and the saved copy's no-eviction, quarantine and delete rules.
+- **Watch orb.** If upstream changes `HeraldOrb` or adds animation to the watch screens, keep `moving` from
+  `orbMoves` at every orb, its clock running only while it's true, and `SpeechOut.sounding` set where playback really
+  starts and ends.
 - **Talk.** If upstream changes `startChat`, `hear` or `converseOnce`, keep the `mode` branch before the live check,
   `awaitTalk()` at the top of `hear`'s loop, and `MANUAL_TALK` for Talk's recordings. If it adds a `VoicePhase`, give
   it a place in `voicePress` and the panel's label. If upstream adds its own Live switch, use theirs and drop

@@ -25,6 +25,14 @@ class SpeechOut(private val context: Context) {
     private val _speaking = MutableStateFlow(false)
     val speaking: StateFlow<Boolean> = _speaking.asStateFlow()
 
+    private val _sounding = MutableStateFlow(false)
+
+    /**
+     * Fork (requirements §11): a reply is sounding right now: a clip's player started and not yet done, or the
+     * watch's own voice between its start and end. Unlike [speaking], not while a clip is on its way or preparing.
+     */
+    val sounding: StateFlow<Boolean> = _sounding.asStateFlow()
+
     private var askId: String? = null
     private val clips = sortedMapOf<Int, File>()
     private var next = 0
@@ -97,6 +105,7 @@ class SpeechOut(private val context: Context) {
         pendingSay = null
         tts?.stop()
         _speaking.value = false
+        _sounding.value = false
     }
 
     fun release() {
@@ -119,6 +128,7 @@ class SpeechOut(private val context: Context) {
         player = media
         playing = file
         fun finished() {
+            if (player === media) _sounding.value = false
             media.release()
             file.delete()
             if (player === media) {
@@ -138,7 +148,10 @@ class SpeechOut(private val context: Context) {
                 finished()
                 true
             }
-            media.setOnPreparedListener { it.start() }
+            media.setOnPreparedListener {
+                it.start()
+                if (player === media) _sounding.value = true
+            }
             media.prepareAsync()
         } catch (_: Exception) {
             finished()
@@ -150,14 +163,19 @@ class SpeechOut(private val context: Context) {
         engine.language = Locale.getDefault()
         engine.setOnUtteranceProgressListener(
             object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) = Unit
+                override fun onStart(utteranceId: String?) {
+                    _sounding.value = true
+                }
+
                 override fun onDone(utteranceId: String?) {
                     _speaking.value = false
+                    _sounding.value = false
                 }
 
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
                     _speaking.value = false
+                    _sounding.value = false
                 }
             },
         )

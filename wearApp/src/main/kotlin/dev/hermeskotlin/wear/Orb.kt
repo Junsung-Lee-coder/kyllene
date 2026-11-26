@@ -1,16 +1,17 @@
 package dev.hermeskotlin.wear
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -66,23 +67,31 @@ fun orbTint(mood: OrbMood, accent: Color = HeraldBlue): Color = when (mood) {
  * ring breathes and swells with your voice; the bars rise as you talk and wave while the reply is read; an arc
  * circles it while Hermes works. A thin ring at the rim fills clockwise with how full the chat's [context] is
  * (0–1, null: not known yet), amber then red as it nears the end, when it's time for a new chat.
+ *
+ * Fork (requirements §11): it moves only while [moving] ([orbMoves]: the microphone or speaker in use, on screen).
+ * Otherwise it's drawn still, on the frame it stopped at, and asks for no frames; a change of mood or context then
+ * shows at once rather than fading.
  */
 @Composable
-fun HeraldOrb(mood: OrbMood, level: Float, modifier: Modifier = Modifier, context: Float? = null) {
-    val fill by animateFloatAsState(context?.coerceIn(0f, 1f) ?: 0f, tween(600), label = "context")
+fun HeraldOrb(mood: OrbMood, level: Float, moving: Boolean, modifier: Modifier = Modifier, context: Float? = null) {
+    val fill by animateFloatAsState(context?.coerceIn(0f, 1f) ?: 0f, if (moving) tween(600) else snap(), label = "context")
     val accentText = MaterialTheme.colorScheme.primary
-    val tint by animateColorAsState(orbTint(mood, MaterialTheme.colorScheme.primaryContainer), label = "tint")
-    val time by rememberInfiniteTransition(label = "orb").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2_200, easing = LinearEasing)),
-        label = "time",
-    )
+    val tint by animateColorAsState(orbTint(mood, MaterialTheme.colorScheme.primaryContainer), if (moving) spring() else snap(), label = "tint")
+    // The orb's clock: one turn every PERIOD_MS while it moves, held where it is while it doesn't.
+    val clock = remember { Animatable(0f) }
+    LaunchedEffect(moving) {
+        if (!moving) return@LaunchedEffect
+        while (true) {
+            clock.animateTo(1f, tween(((1f - clock.value) * ORB_PERIOD_MS).toInt().coerceAtLeast(1), easing = LinearEasing))
+            clock.snapTo(0f)
+        }
+    }
+    val time = clock.value
     val listening = mood == OrbMood.Listening
     // Square root, so a watch mic's quiet range still visibly moves it.
     val voice by animateFloatAsState(
-        if (listening) sqrt((level * 4f).coerceIn(0f, 1f)) else 0f,
-        spring(stiffness = Spring.StiffnessMediumLow),
+        if (listening && moving) sqrt((level * 4f).coerceIn(0f, 1f)) else 0f,
+        if (moving) spring(stiffness = Spring.StiffnessMediumLow) else snap(),
         label = "level",
     )
     val circling = mood == OrbMood.Working || mood == OrbMood.Waiting
@@ -148,6 +157,9 @@ internal fun contextTint(fill: Float, accentText: Color = HeraldBlueText): Color
     fill >= 0.75f -> Amber
     else -> accentText
 }
+
+/** One turn of the orb's wave and arc, as stock. */
+private const val ORB_PERIOD_MS = 2_200
 
 private val BAR_HEIGHTS = listOf(18, 34, 24, 40, 20)
 private val BAR_ALPHAS = listOf(0.8f, 1f, 0.9f, 1f, 0.8f)
