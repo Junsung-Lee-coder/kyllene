@@ -1,5 +1,6 @@
 package dev.hermeskotlin.android.assist
 
+import dev.hermeskotlin.core.custom.SpeechGate
 import android.Manifest
 import android.app.assist.AssistContent
 import android.app.assist.AssistStructure
@@ -87,9 +88,11 @@ class HeraldAssistSession(context: Context) :
             deviceDictation = get<DeviceDictation>(),
             bots = get<BotsApi>(),
             profileRoster = get<ProfilesApi>(),
-        ) { region ->
-            screenshot?.let { shot -> withContext(Dispatchers.Default) { runCatching { ScreenReader.crop(shot, region) }.getOrNull() } }
-        }
+            speechGate = get<SpeechGate>(),
+            cropper = { region ->
+                screenshot?.let { shot -> withContext(Dispatchers.Default) { runCatching { ScreenReader.crop(shot, region) }.getOrNull() } }
+            },
+        )
         // Edge to edge, so the panel sits on the navigation bar and rides up with the keyboard.
         window.window?.let { w ->
             WindowCompat.setDecorFitsSystemWindows(w, false)

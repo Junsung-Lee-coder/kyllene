@@ -12,6 +12,7 @@ import dev.hermeskotlin.core.chat.DraftStart
 import dev.hermeskotlin.core.chat.DraftStore
 import dev.hermeskotlin.core.chat.OutgoingAttachment
 import dev.hermeskotlin.core.chat.LastChatStore
+import dev.hermeskotlin.core.chat.InputRequest
 import dev.hermeskotlin.core.connection.ConnectionState
 import dev.hermeskotlin.core.connection.GatewayConnection
 import dev.hermeskotlin.core.rpc.RpcTransport
@@ -132,6 +133,7 @@ class ChatViewModelTest {
     private fun viewModel(drafts: DraftStore = DraftStore(InMemoryKeyValueStore()), fileReads: MutableList<Pair<String, String?>>? = null,
         seenStore: SeenStore? = null,
         readState: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData? = { null },
+        speechGate: dev.hermeskotlin.core.custom.SpeechGate? = null,
     ): Pair<ChatViewModel, ChatHost> {
         val cookies = PersistentCookiesStorage(InMemoryKeyValueStore())
         // On the test dispatcher, so no request is still finishing on another thread when a test ends.
@@ -162,6 +164,7 @@ class ChatViewModelTest {
             NoDeviceDictation,
             { _, _ -> null },
             seen = seenStore,
+            speechGate = speechGate,
         )
         viewModels.put("chat", vm)
         return vm to chatHost
@@ -297,6 +300,48 @@ class ChatViewModelTest {
         vm.send(null)
         val create = sent.map { Json.parseToJsonElement(it).jsonObject }.first { it["method"]?.toString() == "\"session.create\"" }
         assertEquals("\"/srv/site\"", create["params"]?.jsonObject?.get("cwd")?.toString())
+    }
+
+    /**
+     * Fork (requirements §6.1): which of the chat's own sends are text input to the [dev.hermeskotlin.core.custom.SpeechGate]:
+     * a reply to an earlier voice request stays silent after them. Opening the chat isn't input; an approval tap isn't a
+     * message.
+     */
+    @Test
+    fun typedSendsAndAnswersInTheChatAreTextInputButOpeningAndApprovalsArent() = runTest(dispatcher) {
+        val gate = dev.hermeskotlin.core.custom.SpeechGate { "acct-A" }
+        val (vm, host) = viewModel(speechGate = gate)
+        connection.start(gateway.gatewayUrl)
+        vm.connectionState.first { it is ConnectionState.Connected }
+        suspend fun voice() = gate.voiceInput(gateway.gatewayUrl)
+        suspend fun settle() = repeat(3) { kotlinx.coroutines.yield() }
+
+        val beforeOpen = voice()
+        vm.open(ChatTarget(gateway, "c1", "Chat"))
+        settle()
+        assertTrue(gate.allows(beforeOpen), "opening a chat counted as input")
+        assertNotNull(host.session.value)
+
+        val approval = voice()
+        vm.answer(InputRequest.Approval("a1", "ls", "list", null, listOf(dev.hermeskotlin.core.chat.ApprovalChoice.Once, dev.hermeskotlin.core.chat.ApprovalChoice.Deny)), kotlinx.serialization.json.buildJsonObject { })
+        settle()
+        assertTrue(gate.allows(approval), "an approval tap counted as text")
+
+        val clarify = voice()
+        vm.answer(InputRequest.Clarify("q1", emptyList()), kotlinx.serialization.json.buildJsonObject { })
+        settle()
+        assertTrue(!gate.allows(clarify), "a typed clarification didn't count as text")
+
+        val typed = voice()
+        vm.composer.setTextAndPlaceCursorAtEnd("turn it down")
+        vm.send(null)
+        settle()
+        assertTrue(!gate.allows(typed), "a typed message didn't count as text")
+
+        val picked = voice()
+        vm.sendPrompt("what's next?")
+        settle()
+        assertTrue(!gate.allows(picked), "a picked prompt didn't count as text")
     }
 
     private val scribe = BotIdentity("scribe", "Scribe")

@@ -249,8 +249,11 @@ class VoiceController(
     /** Fork: the voice request this chat sent last, whose reply is read only if no text was sent after it (SpeechGate). */
     private var replyTicket: SpeechGate.Ticket? = null
 
-    /** Fork: whether the reply to the last voice request may be read aloud now. */
-    private fun mayRead(): Boolean = speechGate?.allows(replyTicket) ?: true
+    /**
+     * Fork: whether the reply to the last voice request may be read aloud now: no text reached it since, and its
+     * gateway's account is still the one that asked.
+     */
+    private suspend fun mayRead(): Boolean = speechGate?.allowsNow(replyTicket) ?: true
 
     /**
      * Fork: while a chained chat or Talk runs in [gateway], text sent there stops what's being read, as Skip does;
@@ -259,7 +262,7 @@ class VoiceController(
     private suspend fun stopReadingOnText(gateway: GatewayUrl): () -> Unit {
         val gate = speechGate ?: return {}
         val scope = gate.scope(gateway)
-        return gate.onText { if (it == scope) speechJob?.cancel() }
+        return gate.onText { if (gate.reaches(it, scope)) speechJob?.cancel() }
     }
 
     /** Fork: what the chat's end says even when the person ended it: a live call's transcript tail left unsaved. */
@@ -599,6 +602,14 @@ class VoiceController(
             earlier = earlier?.calls.orEmpty(),
         )
         live = conversation
+        // Fork: text sent where it reaches this call (SpeechGate) hangs it up, as Hang up does, saying why: its voice
+        // stops, nothing it was still to say plays later, and the microphone isn't left listening. A new call needs a
+        // new start.
+        val textEnds = speechGate?.let { gate ->
+            val why = runCatching { getString(Res.string.voice_error_live_text) }.getOrNull() ?: LIVE_ENDED_BY_TEXT
+            val scope = gate.scope(gateway)
+            gate.onText { if (gate.reaches(it, scope)) conversation.hangUp(why) }
+        }
         var error: String? = null
         try {
             error = conversation.run {
@@ -610,6 +621,7 @@ class VoiceController(
                 }
             }
         } finally {
+            textEnds?.invoke()
             // A chat started again on this screen meanwhile has its own call and panel; this one leaves them be.
             if (live === conversation) live = null
             val mine = currentCoroutineContext().job
@@ -621,7 +633,8 @@ class VoiceController(
             // A newer chat on this screen keeps its own panel and notice.
             if (chatJob == null || chatJob === mine) {
                 endNotice = unsaved
-                _chat.value = VoiceChatState(error = error.takeUnless { stoppedByUser } ?: unsaved)
+                // Fork: why the call ended, and that its transcript's end couldn't be saved, both.
+                _chat.value = VoiceChatState(error = listOfNotNull(error.takeUnless { stoppedByUser }, unsaved).joinToString(" ").ifEmpty { null })
             }
         }
         return true
@@ -1558,6 +1571,7 @@ class VoiceController(
         const val HEADSET_LOST = "Your earphones disconnected, so the voice chat stopped instead of playing on the phone's speaker."
         const val HEADSET_MIC_UNAVAILABLE = "Your earphones' microphone can't be used here, so the phone's microphone is listening."
         const val NOTHING_HEARD = "Didn't catch anything."
+        const val LIVE_ENDED_BY_TEXT = "The live call ended because you sent a message."
         const val TRANSCRIPT_TAIL_UNSAVED = "The end of this call's transcript couldn't be saved on the phone."
         const val TRANSCRIPT_UNREADABLE = "Some earlier live call transcript in this chat couldn't be read. It's kept on the phone as it was."
         const val LIVE_UNAVAILABLE = "Live voice isn't set up for this profile on your gateway. Turn Phone Live off to use Talk."

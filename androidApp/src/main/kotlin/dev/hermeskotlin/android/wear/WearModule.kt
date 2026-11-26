@@ -25,7 +25,7 @@ val wearModule = module {
     // Fork: a watch's spoken ask is a voice request; its reply isn't read after text sent on the phone (SpeechGate).
     single { WatchRelay(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), CatalogueWatchCallWords, speechGate = get()) }
     // Fork: the watch's live calls are kept with the phone's (LiveTranscripts).
-    single { WatchCalls(get(), get(), get(), get(), get(), transcripts = get()) }
+    single { WatchCalls(get(), get(), get(), get(), get(), transcripts = get(), speechGate = get()) }
     single { WearRequests(get(), get()) }
     single(createdAtStart = true) { WatchProfileNotifier(androidContext(), get(), get(), get()).also { it.start() } }
     single { WatchRinger(androidContext(), get(), get(), get(), get(), get()) }

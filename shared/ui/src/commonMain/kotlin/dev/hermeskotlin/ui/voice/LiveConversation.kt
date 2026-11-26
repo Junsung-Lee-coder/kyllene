@@ -69,6 +69,17 @@ internal class LiveConversation(
 ) {
     /** Fork: what's taken of the transcript couldn't be written yet; said once until it is. */
     private var unsaved = false
+
+    /** Fork: ended from outside ([hangUp]), with the reason [run] returns. */
+    private val hungUp = CompletableDeferred<String?>()
+
+    /**
+     * Fork: ends the call as Hang up does, once it's connected (at once, if it already is), with [reason] as what [run]
+     * returns: its voice stops and the call closes, the transcript's last pieces written as usual.
+     */
+    fun hangUp(reason: String?) {
+        hungUp.complete(reason)
+    }
     private val transcript = ArrayList<LiveFragment>()
     private var eventSeq = 0
     private var delegation: Job? = null
@@ -147,6 +158,8 @@ internal class LiveConversation(
             return@coroutineScope e.message ?: getString(Res.string.voice_error_live_start)
         }
         state.update { it.copy(phase = VoicePhase.Listening) }
+        // Fork: ended from outside (text sent where it reaches this call): as Hang up, saying why.
+        val ender = launch { ended.complete(hungUp.await()) }
         val poll = launch {
             while (isActive) {
                 val speaking = call.speaking()
@@ -291,6 +304,7 @@ internal class LiveConversation(
         try {
             ended.await()
         } finally {
+            ender.cancel()
             sessionWatch?.cancel()
             // Fork: what's still waiting is written before the call goes, whatever ended it.
             recording?.let { r -> withContext(NonCancellable) { runCatching { r.flush() } } }

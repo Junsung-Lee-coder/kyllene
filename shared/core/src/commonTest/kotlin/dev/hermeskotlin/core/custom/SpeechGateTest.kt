@@ -45,23 +45,61 @@ class SpeechGateTest {
         // Account B's text in the same gateway left A's reply alone; the other gateway's text silenced only its own.
         assertTrue(gate.allows(a))
         assertFalse(gate.allows(elsewhere))
-        // An unknown account is a scope of its own.
+        // A request whose account isn't known (a binding still pending) is reached by any text in its gateway:
+        // it fails toward silence.
         owner = null
         val unknown = gate.voiceInput(home)
-        owner = "acct-A"
+        owner = "acct-B"
         gate.textInput(home)
-        assertTrue(gate.allows(unknown))
-        assertFalse(gate.allows(a))
+        assertFalse(gate.allows(unknown))
+        // Text whose account isn't known reaches every account of its gateway, and only it.
+        owner = "acct-A"
+        val known = gate.voiceInput(home)
+        val there = gate.voiceInput(other)
+        owner = null
+        gate.textInput(home)
+        assertFalse(gate.allows(known))
+        assertTrue(gate.allows(there))
+        // Text whose gateway isn't known reaches every gateway.
+        owner = "acct-A"
+        val anywhere = gate.voiceInput(other)
+        gate.textInput(null)
+        assertFalse(gate.allows(anywhere))
+    }
+
+    @Test
+    fun aReplyIsNeverReadOnceItsGatewaysAccountIsntTheOneThatAsked() = runTest {
+        var owner: String? = "acct-A"
+        val gate = SpeechGate { owner }
+        val asked = gate.voiceInput(home)
+        assertTrue(gate.allowsNow(asked))
+        owner = "acct-B"
+        assertFalse(gate.allowsNow(asked))
+        owner = null
+        assertFalse(gate.allowsNow(asked))
+        owner = "acct-A"
+        assertTrue(gate.allowsNow(asked))
+    }
+
+    @Test
+    fun typedTextFromOutsideAChatCountsBeforeItGoes() = runTest {
+        val gate = SpeechGate { "acct-A" }
+        val asked = gate.voiceInput(home)
+        val seenWhileSending = gate.typed(home) { gate.allows(asked) }
+        assertFalse(seenWhileSending, "the typed send went before it was counted")
+        assertFalse(gate.allows(asked))
+        // Without a gate (a platform with none), it just sends.
+        assertEquals("sent", (null as SpeechGate?).typed(home) { "sent" })
     }
 
     @Test
     fun textTellsWhatsReadingInItsScopeAtOnceUntilItStopsListening() = runTest {
         val gate = SpeechGate { "acct-A" }
-        val told = mutableListOf<String>()
+        val told = mutableListOf<SpeechGate.Scope?>()
         val stop = gate.onText { told += it }
         gate.textInput(home)
         gate.textInput(other)
-        assertEquals(listOf(gate.scope(home), gate.scope(other)), told)
+        assertEquals<List<SpeechGate.Scope?>>(listOf(gate.scope(home), gate.scope(other)), told)
         stop()
         gate.textInput(home)
         assertEquals(2, told.size)

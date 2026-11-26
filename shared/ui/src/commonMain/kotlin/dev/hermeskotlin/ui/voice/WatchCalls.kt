@@ -41,6 +41,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.time.TimeSource
 import dev.hermeskotlin.core.custom.LiveTranscripts
+import dev.hermeskotlin.core.custom.SpeechGate
 import dev.hermeskotlin.ui.resources.*
 import org.jetbrains.compose.resources.getString
 
@@ -63,6 +64,8 @@ class WatchCalls(
     private val openers: CallOpeners = CallOpeners(),
     /** Fork: the watch's live calls are kept on the phone with its own, and given to the session's next call. */
     private val transcripts: LiveTranscripts? = null,
+    /** Fork: text sent on the phone where it reaches the watch's call hangs it up (SpeechGate). */
+    private val speechGate: SpeechGate? = null,
 ) {
     private val serial = Dispatchers.Default.limitedParallelism(1)
     private val scope = CoroutineScope(appScope.coroutineContext + SupervisorJob(appScope.coroutineContext[Job]) + serial)
@@ -156,6 +159,12 @@ class WatchCalls(
             recording = recording,
             earlier = earlier?.calls.orEmpty(),
         )
+        // Fork: text sent where it reaches this call hangs it up, as Hang up does, and the watch is told why.
+        val textEnds = speechGate?.let { gate ->
+            val why = getString(Res.string.voice_error_live_text)
+            val scope = gate.scope(chat.gateway)
+            gate.onText { if (gate.reaches(it, scope)) conversation.hangUp(why) }
+        }
         var answer: String? = null
         held.onAnswer = { sdp ->
             answer = sdp
@@ -214,6 +223,7 @@ class WatchCalls(
                 }
             }
         } finally {
+            textEnds?.invoke()
             withContext(NonCancellable) {
                 watching.cancel()
                 answering.cancel()

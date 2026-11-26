@@ -572,7 +572,7 @@ class WatchRelay(
         // text is sent on the phone after it. The last ask's voice no longer listens for that.
         watchSpeechWatch.exchange(null)?.invoke()
         val ticket = speechGate?.voiceInput(gateway)
-        val voicing = { speechGate?.allows(ticket) ?: true }
+        val voicing: suspend () -> Boolean = { speechGate?.allowsNow(ticket) ?: true }
         val botProfile = ask.botProfile
         val owner = ask.scope
         if (owner != null && (owner.gateway != gateway.value || botProfile != null && owner.profile != botProfile)) {
@@ -668,7 +668,7 @@ class WatchRelay(
         speechGate?.let { gate ->
             val gated = gate.scope(gateway)
             var told = false
-            watchSpeechWatch.exchange(gate.onText { if (it == gated && !told) { told = true; scope.launch { tell(last.copy(speech = ReplySpeech.Off)) } } })?.invoke()
+            watchSpeechWatch.exchange(gate.onText { if (gate.reaches(it, gated) && !told) { told = true; scope.launch { tell(last.copy(speech = ReplySpeech.Off)) } } })?.invoke()
         }
         if (!speak(node, ask.id, spoken, gateway, profile, voicing) && voicing()) {
             tell(last.copy(speech = ReplySpeech.Unavailable))
@@ -679,7 +679,7 @@ class WatchRelay(
      * Voices [text] in the gateway's voice, clip by clip, each sent as soon as it's made so the first plays
      * while the rest are made. False when not even the first could be made or sent: the watch reads it itself.
      */
-    private suspend fun speak(node: String, askId: String, text: String, gateway: GatewayUrl, profile: String?, voicing: () -> Boolean = { true }): Boolean {
+    private suspend fun speak(node: String, askId: String, text: String, gateway: GatewayUrl, profile: String?, voicing: suspend () -> Boolean = { true }): Boolean {
         // Not waited on: the first clip shouldn't wait for it. Let go even when the watch stops the voice
         // (the turn cancelled), after the lease itself has gone out.
         val lease = scope.launch { audio.ttsLease(gateway, true, profile) }

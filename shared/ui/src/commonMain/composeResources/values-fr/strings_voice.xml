@@ -93,4 +93,5 @@
     <string name="voice_error_transcript_unsaved">La transcription de cet appel n'a pas encore pu être enregistrée sur le téléphone ; elle est conservée et un nouvel essai aura lieu.</string>
     <string name="voice_error_transcript_unreadable">Une partie d'une transcription d'appel en direct précédente de ce chat n'a pas pu être lue. Elle est conservée telle quelle sur le téléphone.</string>
     <string name="voice_error_transcript_tail_unsaved">La fin de la transcription de cet appel n'a pas pu être enregistrée sur le téléphone.</string>
+    <string name="voice_error_live_text">L'appel en direct s'est terminé parce que vous avez envoyé un message.</string>
 </resources>

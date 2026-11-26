@@ -989,6 +989,8 @@ class ChatViewModel(
         // One tap asks right away, unless it would sweep up a message being put together.
         if (idle && _comments.value.isEmpty() && composer.text.isBlank() && _attachments.value.isEmpty()) {
             val comment = newComment(++lastCommentId, source, anchor, note = EXPLAIN_NOTE)
+            // Fork: a prompt the person sends by hand, not by voice: text input (SpeechGate).
+            textSent()
             viewModelScope.launch {
                 if (chat.submit(formatReview(listOf(comment), ""), emptyList(), queue = false) == SendOutcome.NotSent) {
                     _comments.update { listOf(comment) + it }
@@ -1439,6 +1441,9 @@ class ChatViewModel(
 
     override fun answer(request: InputRequest, result: JsonObject) {
         val chat = session.value ?: return
+        // Fork: an answer given in the chat (a clarification, a secret, a code) is text input; an approval tap isn't
+        // a message (SpeechGate).
+        if (request !is InputRequest.Approval) textSent()
         viewModelScope.launch { chat.answer(request, result) }
     }
 

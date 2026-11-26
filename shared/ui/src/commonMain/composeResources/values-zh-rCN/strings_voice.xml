@@ -93,4 +93,5 @@
     <string name="voice_error_transcript_unsaved">此通话的转写暂时无法保存到手机；已保留并会重试。</string>
     <string name="voice_error_transcript_unreadable">此聊天中较早的实时通话转写有部分无法读取。它已按原样保留在手机上。</string>
     <string name="voice_error_transcript_tail_unsaved">此通话转写的末尾部分无法保存到手机。</string>
+    <string name="voice_error_live_text">因为你发送了消息，实时通话已结束。</string>
 </resources>

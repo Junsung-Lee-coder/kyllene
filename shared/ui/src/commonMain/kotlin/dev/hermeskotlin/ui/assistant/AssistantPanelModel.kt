@@ -1,5 +1,7 @@
 package dev.hermeskotlin.ui.assistant
 
+import dev.hermeskotlin.core.custom.SpeechGate
+import dev.hermeskotlin.core.custom.typed
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
@@ -119,6 +121,11 @@ class AssistantPanelModel(
     private val bots: BotsApi? = null,
     private val profileRoster: ProfilesApi? = null,
     private val cropper: ScreenCropper = ScreenCropper { null },
+    /**
+     * Fork: what's typed here and sent is text input (SpeechGate), silencing automatic speech of earlier voice
+     * requests in the gateway. The panel's own voice is dictation only: it reads nothing aloud itself.
+     */
+    private val speechGate: SpeechGate? = null,
 ) {
     private val scope = CoroutineScope(appScope.coroutineContext + SupervisorJob(appScope.coroutineContext[Job]))
 
@@ -156,7 +163,7 @@ class AssistantPanelModel(
     internal val speaker: StateFlow<ReplySpeaker?> = _speaker.asStateFlow()
 
     val composer = TextFieldState()
-    val voice = VoiceController(audio, recorder, player, scope, appScope, deviceDictation = deviceDictation)
+    val voice = VoiceController(audio, recorder, player, scope, appScope, deviceDictation = deviceDictation, speechGate = speechGate)
 
     val connectionState get() = connection.state
 
@@ -332,7 +339,7 @@ class AssistantPanelModel(
             }
             // What was shown alone still asks something.
             val prompt = text.ifEmpty { if (circled != null) CIRCLED_PROMPT else if (attachments.isNotEmpty()) SCREEN_ONLY_PROMPT else return@launch }
-            val sent = session.send(prompt, attachments)
+            val sent = speechGate.typed(session.gateway) { session.send(prompt, attachments) }
             // Not sent: the words go back where they were typed, and what was shown stays for the retry.
             if (!sent && composer.text.isEmpty()) composer.setTextAndPlaceCursorAtEnd(text)
             if (sent) {

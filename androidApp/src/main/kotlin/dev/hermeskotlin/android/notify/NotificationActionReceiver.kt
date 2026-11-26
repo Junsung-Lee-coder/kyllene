@@ -13,6 +13,9 @@ import dev.hermeskotlin.core.chat.InputAnswers
 import dev.hermeskotlin.core.chat.InputRequest
 import dev.hermeskotlin.core.chat.SessionWatcher
 import dev.hermeskotlin.core.chat.TurnOutcome
+import dev.hermeskotlin.core.custom.SpeechGate
+import dev.hermeskotlin.core.custom.typed
+import dev.hermeskotlin.core.gateway.GatewayRepository
 import dev.hermeskotlin.core.inbox.InboxStore
 import dev.hermeskotlin.core.inbox.markNoticeRead
 import dev.hermeskotlin.core.push.PushSetup
@@ -40,6 +43,12 @@ class NotificationActionReceiver : BroadcastReceiver(), KoinComponent {
     private val answers: RequestAnswers by inject()
     private val inbox: InboxStore by inject()
     private val settings: SettingsStore by inject()
+    /** Fork: an inline reply typed here is text input (requirements §6.1). */
+    private val speechGate: SpeechGate by inject()
+    private val gateways: GatewayRepository by inject()
+
+    /** Fork: the gateway a followed chat's or a bot's reply goes to: the app's current one (null if none). */
+    private suspend fun currentGateway() = gateways.current()?.gatewayUrl
 
     override fun onReceive(context: Context, intent: Intent) {
         val pending = goAsync()
@@ -66,6 +75,8 @@ class NotificationActionReceiver : BroadcastReceiver(), KoinComponent {
             }
             ACTION_CLARIFY -> {
                 if (text.isNullOrEmpty()) return
+                // Fork: a typed answer is text input, in the gateway of the chat that asked (else the current one).
+                speechGate.textInput(session?.gateway ?: currentGateway())
                 answer(intent.getStringExtra(EXTRA_REQUEST_ID) ?: return) { request ->
                     (request as? InputRequest.Clarify)?.let { InputAnswers.clarify(it, listOf(listOf(text))) }
                 }
@@ -86,7 +97,8 @@ class NotificationActionReceiver : BroadcastReceiver(), KoinComponent {
                 notifications.cancelBot(bot)
                 awaitConnection()
                 // The bot's answer comes back as its next notification.
-                val sent = scope.async { runCatching { bots.sendToBot(bot, storedId, text) }.isSuccess }
+                val gateway = currentGateway()
+                val sent = scope.async { runCatching { speechGate.typed(gateway) { bots.sendToBot(bot, storedId, text) } }.isSuccess }
                 if (withTimeoutOrNull(RECEIVER_BUDGET_MS) { sent.await() } == false) {
                     notifications.postFailure(bot, ChatNotifications.BOT_ID, R.string.notification_bot_send_failed)
                 }
@@ -105,7 +117,8 @@ class NotificationActionReceiver : BroadcastReceiver(), KoinComponent {
                         return
                     }
                     awaitConnection()
-                    val sent = scope.async { watcher.reply(storedId, text) }
+                    val gateway = currentGateway()
+                    val sent = scope.async { speechGate.typed(gateway) { watcher.reply(storedId, text) } }
                     if (withTimeoutOrNull(RECEIVER_BUDGET_MS) { sent.await() } == false) {
                         notifications.postFailure(storedId, ChatNotifications.REPLY_ID, R.string.notification_reply_send_failed)
                     }
@@ -116,7 +129,7 @@ class NotificationActionReceiver : BroadcastReceiver(), KoinComponent {
                 if (watchChat) relay.phoneTurnStarts(storedId)
                 awaitConnection()
                 // The send itself outlives this receiver's few seconds; only the verdict is waited for.
-                val sent = scope.async { chat.send(text) }
+                val sent = scope.async { speechGate.typed(chat.gateway) { chat.send(text) } }
                 if (watchChat) scope.launch { tellWatchChat(chat, storedId, sent.await()) }
                 if (withTimeoutOrNull(RECEIVER_BUDGET_MS) { sent.await() } == false) {
                     val error = chat.state.value.error
