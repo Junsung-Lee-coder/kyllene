@@ -97,6 +97,24 @@ Each change is one commit, so it can be moved to a new release, or dropped, on i
      `wearlink/NewChatWireTest.kt` checks the wire format; `wearApp/.../WatchNewChatTest.kt` checks the watch rule.
      The stock `PebbleLinkTest` expects `newChat = true` on a blank-chat Pebble ask.
 
+4. **The phone's voice uses earphones as a call does, and their button is one toggle.**
+   - The chained voice chat (talk-over on or off) is routed to earphones with a microphone (Bluetooth SCO or LE, a
+     wired or USB headset), on Android 12 and later: it listens through their microphone and plays in them, as a
+     live call does. Earphones whose microphone can't be used are said in the voice panel's error line.
+   - If those earphones go away mid-chat, what plays stops at once and the chat ends saying why; nothing moves to
+     the phone's speaker. A live call routed to earphones hangs up the same way.
+   - Play, pause, play/pause, the headset hook and stop are one toggle: start the chat's voice (as `/voice` does),
+     send what the chained chat heard, or end a live call or the chat. One press counts once; the next press is its
+     own. In front, the activity takes the key (`onKeyDown`/`onKeyUp`); with voice on, a media session takes it out
+     of sight too. Read aloud keeps the button while it reads, and other keys go on as before.
+   - Rules: `shared/core/.../custom/HeadsetAudio.kt` (route) and `shared/ui/.../voice/VoiceButton.kt` (toggle).
+     Seams: `SpeechPlayer.chainedChatAudio(talkOver, onHeadsetLost)` and `headsetMicUnavailable()` (`Speech.kt`),
+     their Android player (`AndroidVoice.kt`), `AndroidLiveCall.kt`'s headset watch, `VoiceController.converseChained`
+     and `headsetLost`, the `ChatScreen` binding, `androidApp/.../voice/VoiceMediaButtons.kt` and two
+     `HeraldActivity` overrides. Two strings, in every language.
+   - Tests: `core/custom/HeadsetAudioTest.kt`, `ui/voice/PhoneVoiceControlsTest.kt` (the real `VoiceController`,
+     chained and live).
+
 The fork doesn't change the settings screens or layout. The watch app changes only as described above.
 
 ## Moving to a newer upstream release
@@ -134,6 +152,11 @@ For each conflict or failing test:
   false. Wherever upstream changes `WatchLink.newChat()`, `ask`, `startCall` or `WatchStore.setChat`/`adoptChat`,
   New chat must still be sent and must end once a chat or bot is chosen or adopted. If upstream adds its own way to
   tell New chat from no choice, use theirs and drop the fork's flag.
+
+- **Phone voice.** If upstream changes `converseChained`, keep its one `chainedChatAudio(talkOver, …)` call for every
+  chained chat. If it changes Android routing in `AndroidSpeechPlayer`, keep the earphone route and the "lost
+  earphones stop, never the speaker" rule. If it adds its own media-button handling, route these keys to
+  `VoiceButton` from there instead of the fork's session.
 
 Then update the table above and run:
 
