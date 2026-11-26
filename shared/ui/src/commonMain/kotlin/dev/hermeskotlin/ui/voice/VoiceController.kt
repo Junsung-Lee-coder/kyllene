@@ -77,7 +77,11 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-enum class VoicePhase { Off, Connecting, Listening, Transcribing, Thinking, Speaking }
+enum class VoicePhase {
+    Off, Connecting, Listening, Transcribing, Thinking, Speaking,
+    /** Fork: Talk ([VoiceMode.Manual]) waits for the next press, its microphone closed. */
+    Ready,
+}
 
 data class VoiceChatState(
     val phase: VoicePhase = VoicePhase.Off,
@@ -98,6 +102,8 @@ data class VoiceChatState(
     val working: String? = null,
     /** Talking over the reply cuts in (the profile's `voice.barge_in`). */
     val bargeIn: Boolean = false,
+    /** Fork: Talk, Phone Live off ([VoiceMode.Manual]): each request is recorded until it's sent or dropped. */
+    val manual: Boolean = false,
 )
 
 data class DictationState(
@@ -226,6 +232,17 @@ class VoiceController(
     private var chained: Job? = null
     private var chainedAudio: (() -> Unit)? = null
 
+    /** Fork: presses that start Talk's next recording; null outside a Talk chat. */
+    private var talkPresses: Channel<Unit>? = null
+    /** Fork: the press that started the Talk chat records at once, without waiting at Ready first. */
+    private var talkArmed = false
+    /** Fork: the Talk request under way (recording, sending, read aloud); End drops it, back to Ready. */
+    private var talkTurn: Job? = null
+    /** Fork: whether Talk stays Ready, holding the microphone service and the button, with Herald out of sight. */
+    private var readyAway: () -> Boolean = { false }
+    /** Fork: Herald is out of sight now (unlike [away], which stays set until the next chat). */
+    private var outOfSight = false
+
     /**
      * [pauseMs] is how long a quiet spell after speech has to last before it's sent. [opener]: a call the agent placed,
      * which the voice opens by saying why.
@@ -237,13 +254,18 @@ class VoiceController(
         pauseMs: Long = VoiceActivity().silenceMs,
         opener: CallReason? = null,
         ringback: Boolean = false,
+        /** Fork: Talk or a live call for a chat started on the phone; the chat's own voice otherwise. */
+        mode: VoiceMode = VoiceMode.Stock,
+        /** Fork: Talk stays Ready out of sight (Settings › Background earphone button); asked each time. */
+        readyAway: () -> Boolean = { false },
     ) {
         if (chatJob?.isActive == true) return
+        this.readyAway = readyAway
         cancelDictation()
         // The voice chat has the speaker now.
         stopReading()
         // Connecting while it checks for a live call: nothing listens yet, so Mute isn't offered until it does.
-        _chat.value = VoiceChatState(VoicePhase.Connecting)
+        _chat.value = VoiceChatState(VoicePhase.Connecting, manual = mode == VoiceMode.Manual)
         stoppedByUser = false
         endedElsewhere = false
         roomFloor = 0f
@@ -270,6 +292,12 @@ class VoiceController(
                         // A connection cue must never prevent the call.
                     }
                 } else null
+                // Fork: Talk never becomes a live call, and the microphone opens only for the press that started it.
+                if (mode == VoiceMode.Manual) {
+                    ringing?.cancelAndJoin()
+                    converseManual(session, gateway, profile)
+                    return@launch
+                }
                 // Asked while the live check goes on: a chained chat needs it before its first listen.
                 val talkOver = async { audio.bargeIn(gateway, profile) }
                 if (startLive(session, gateway, profile, opener) { ringing?.cancelAndJoin() }) {
@@ -277,6 +305,13 @@ class VoiceController(
                     return@launch
                 }
                 ringing?.cancelAndJoin()
+                // Fork: Phone Live on is a live call or nothing: the gateway's reason, not the chained chat instead.
+                if (mode == VoiceMode.Live) {
+                    talkOver.cancel()
+                    val why = runCatching { getString(Res.string.voice_error_live_unavailable) }.getOrNull() ?: LIVE_UNAVAILABLE
+                    _chat.update { it.copy(error = why) }
+                    return@launch
+                }
                 converseChained(session, gateway, profile, pauseMs, opener, talkOver)
             } finally {
                 ringing?.cancel()
@@ -394,9 +429,101 @@ class VoiceController(
      */
     fun onBackground() {
         away = true
+        outOfSight = true
         cancelDictation()
         if (!readingHeld) stopReading()
         if (!held) stopChat()
+        // Fork: Talk waiting at Ready goes with Herald, unless it's to keep the earphones' button out of sight.
+        else if (_chat.value.phase == VoicePhase.Ready && !readyAway()) stopChat()
+    }
+
+    /** Fork: Herald is in sight again; Talk's Ready no longer depends on the background setting. */
+    fun onForeground() {
+        outOfSight = false
+    }
+
+    /**
+     * Fork: Talk (Phone Live off), one request at a time. Each is recorded until it's sent or dropped, voiced as the
+     * chained chat voices a reply, then the chat waits at [VoicePhase.Ready] for the next press ([talk]); it never
+     * listens on its own, nor over the reply. Earphones take each request as they take the chained chat; between
+     * requests nothing is routed, so music and calls have the audio as usual.
+     */
+    private suspend fun converseManual(session: ChatSession, gateway: GatewayUrl, profile: String?) = coroutineScope {
+        appScope.launch { audio.ttsLease(gateway, active = true, profile) }
+        val presses = Channel<Unit>(Channel.CONFLATED)
+        talkPresses = presses
+        talkArmed = true
+        bargeIn = null
+        cantListenOver = true
+        try {
+            while (isActive) {
+                val turn = async { converseOnce(session, gateway, profile, MANUAL_TALK, null) }
+                talkTurn = turn
+                val result = try {
+                    turn.await()
+                } catch (e: CancellationException) {
+                    // The chat ending goes on ending; End only dropped this request, and the chat is Ready again.
+                    currentCoroutineContext().ensureActive()
+                    null
+                } finally {
+                    if (talkTurn === turn) talkTurn = null
+                    closeTalkAudio()
+                }
+                // "Stop" said, or a microphone that can't record: the chat ends, as the chained chat does.
+                if (result == Turn.End) break
+            }
+        } finally {
+            if (talkPresses === presses) talkPresses = null
+            talkTurn = null
+            appScope.launch { audio.ttsLease(gateway, active = false, profile) }
+        }
+    }
+
+    /** Fork: in Talk, waits at Ready for a press, unless the chat's first press is still to be recorded. */
+    private suspend fun awaitTalk() {
+        val presses = talkPresses ?: return
+        if (talkArmed) {
+            talkArmed = false
+        } else {
+            _chat.update { it.copy(phase = VoicePhase.Ready, level = 0f, hearing = false, working = null, bargeIn = false) }
+            // Out of sight, Ready stays only to keep the earphones' button (Settings › Background earphone button).
+            if (outOfSight && !readyAway()) {
+                stopChat()
+                currentCoroutineContext().ensureActive()
+            }
+            presses.receive()
+        }
+        // The earphones take this request as they take a chained chat; nothing was routed while it waited.
+        if (chainedAudio == null) {
+            val chat = chatJob
+            chainedAudio = player.chainedChatAudio(false) { headsetLost(chat) }
+            if (player.headsetMicUnavailable()) {
+                val why = runCatching { getString(Res.string.voice_error_headset_mic_unavailable) }.getOrNull() ?: HEADSET_MIC_UNAVAILABLE
+                _chat.update { it.copy(error = why) }
+            }
+        }
+    }
+
+    private fun closeTalkAudio() {
+        chainedAudio?.let { chainedAudio = null; it() }
+    }
+
+    /** Fork: Talk is Ready: record the next request (the Mic button, or the earphones). */
+    fun talk() {
+        if (_chat.value.phase == VoicePhase.Ready && chatJob?.isActive == true) talkPresses?.trySend(Unit)
+    }
+
+    /**
+     * Fork: End. In Talk, a request under way is dropped, unsent if it's still being recorded or written down, and
+     * the chat is Ready again; at Ready, End closes the chat. Any other voice ends as [stopChat] ends it.
+     */
+    fun end() {
+        val turn = talkTurn
+        if (_chat.value.manual && _chat.value.phase != VoicePhase.Ready && turn != null && turn.isActive) {
+            turn.cancel()
+        } else {
+            stopChat()
+        }
     }
 
     /**
@@ -809,6 +936,8 @@ class VoiceController(
     /** What's said next, as [Heard] tells. An error on show stays through silence, and goes once words come. */
     private suspend fun hear(gateway: GatewayUrl, profile: String?, activity: VoiceActivity): Heard {
         while (true) {
+            // Fork: Talk records only on a press.
+            awaitTalk()
             _chat.update { it.copy(phase = VoicePhase.Listening, level = 0f, hearing = false) }
             // Muted: the microphone stays shut until it's unmuted, between turns and for a question asked aloud alike.
             _chat.first { !it.muted }
@@ -1341,6 +1470,7 @@ class VoiceController(
         /** Fork: the words where the catalogue can't be read (host tests); the app says them in its language. */
         const val HEADSET_LOST = "Your earphones disconnected, so the voice chat stopped instead of playing on the phone's speaker."
         const val HEADSET_MIC_UNAVAILABLE = "Your earphones' microphone can't be used here, so the phone's microphone is listening."
+        const val LIVE_UNAVAILABLE = "Live voice isn't set up for this profile on your gateway. Turn Phone Live off to use Talk."
 
         const val MAX_FAILURES = 3
         /**

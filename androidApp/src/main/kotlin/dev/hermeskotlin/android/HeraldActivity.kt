@@ -9,8 +9,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
-import dev.hermeskotlin.android.voice.VoiceMediaSession
-import dev.hermeskotlin.android.voice.voiceKeyEvent
+import dev.hermeskotlin.ui.voice.VoiceMediaSession
+import dev.hermeskotlin.ui.voice.voiceKeyEvent
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge

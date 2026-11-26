@@ -79,4 +79,14 @@
     <string name="call_thinking">Réflexion</string>
     <string name="call_working">Au travail : %1$s</string>
     <string name="call_speaking">Parle</string>
+    <!-- Fork: Talk (Phone Live off) and the Phone Live switch. -->
+    <string name="voice_ready">Prêt</string>
+    <string name="voice_talk">Parler</string>
+    <string name="voice_hint_ready">Touchez le micro ou appuyez sur le bouton de vos écouteurs pour parler</string>
+    <string name="voice_hint_tap_send">Touchez Envoyer quand vous avez fini</string>
+    <string name="voice_error_live_unavailable">La voix en direct n'est pas configurée pour ce profil sur votre passerelle. Désactivez Téléphone en direct pour enregistrer des demandes.</string>
+    <string name="settings_phone_live">Téléphone en direct</string>
+    <string name="settings_phone_live_detail">Désactivé : un chat vocal enregistre une demande jusqu'à ce que vous l'envoyiez. Activé : il lance un appel en direct.</string>
+    <string name="settings_background_button">Bouton des écouteurs en arrière-plan</string>
+    <string name="settings_background_button_detail">Quand un chat vocal est ouvert, le bouton des écouteurs continue de lancer des enregistrements une fois l'app quittée, au lieu de contrôler la musique. Sa notification reste affichée pendant ce temps.</string>
 </resources>

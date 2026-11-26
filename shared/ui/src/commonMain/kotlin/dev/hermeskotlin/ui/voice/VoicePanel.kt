@@ -102,6 +102,8 @@ internal fun VoicePanel(
     onEnd: () -> Unit,
     onExpand: () -> Unit,
     onSendNow: () -> Unit = {},
+    /** Fork: Talk is Ready: record the next request. */
+    onTalk: () -> Unit = {},
 ) {
     val shape = RoundedCornerShape(28.dp)
     val page = Theme[colors][background]
@@ -160,7 +162,20 @@ internal fun VoicePanel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Mute in a call and a chained chat alike; empty slots keep End in the middle.
-            if (state.phase != VoicePhase.Connecting) {
+            // Fork: Talk has no Mute, since nothing listens unless asked: its Mic records the next request at Ready.
+            if (state.manual) {
+                if (state.phase == VoicePhase.Ready) {
+                    RoundButton(
+                        Lucide.Mic,
+                        contentDescription = stringResource(Res.string.voice_talk),
+                        fill = Theme[colors][textColor].copy(alpha = 0.08f),
+                        tint = Theme[colors][textColor],
+                        onClick = onTalk,
+                    )
+                } else {
+                    Spacer(Modifier.size(60.dp))
+                }
+            } else if (state.phase != VoicePhase.Connecting) {
                 RoundButton(
                     if (state.muted) Lucide.MicOff else Lucide.Mic,
                     contentDescription = stringResource(if (state.muted) Res.string.voice_unmute else Res.string.voice_mute),
@@ -202,6 +217,7 @@ internal fun label(state: VoiceChatState): String = when (state.phase) {
     VoicePhase.Transcribing -> stringResource(Res.string.voice_transcribing)
     VoicePhase.Thinking -> stringResource(Res.string.voice_thinking)
     VoicePhase.Speaking -> stringResource(Res.string.voice_speaking)
+    VoicePhase.Ready -> stringResource(Res.string.voice_ready)
     VoicePhase.Off -> ""
 }
 
@@ -209,9 +225,12 @@ internal fun label(state: VoiceChatState): String = when (state.phase) {
 internal fun canSendNow(state: VoiceChatState) = !state.live && state.phase == VoicePhase.Listening && state.hearing
 
 /** What to do now, while there are no words to show; [hintText] words it. */
-internal enum class VoiceHint { Unmute, Connecting, Working, TalkOver, Skip, SendNow, JustTalk }
+internal enum class VoiceHint { Unmute, Connecting, Working, TalkOver, Skip, SendNow, JustTalk, Ready, TapSend }
 
 internal fun hint(state: VoiceChatState) = when {
+    // Fork: Talk waits for a press, and a recording goes when it's sent, not on a pause.
+    state.phase == VoicePhase.Ready -> VoiceHint.Ready
+    state.manual && state.phase == VoicePhase.Listening -> VoiceHint.TapSend
     state.muted -> VoiceHint.Unmute
     state.phase == VoicePhase.Connecting -> VoiceHint.Connecting
     state.phase == VoicePhase.Thinking -> VoiceHint.Working
@@ -231,6 +250,8 @@ internal fun hintText(state: VoiceChatState): String = stringResource(
         VoiceHint.Skip -> Res.string.voice_hint_skip
         VoiceHint.SendNow -> Res.string.voice_hint_send_now
         VoiceHint.JustTalk -> Res.string.voice_hint_just_talk
+        VoiceHint.Ready -> Res.string.voice_hint_ready
+        VoiceHint.TapSend -> Res.string.voice_hint_tap_send
     },
 )
 

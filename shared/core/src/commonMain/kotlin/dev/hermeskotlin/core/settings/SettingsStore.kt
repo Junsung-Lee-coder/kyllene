@@ -104,6 +104,16 @@ data class AppSettings(
     /** The mic for dictation in the composer and on an empty chat. Off, it goes, and the model name gets the room. */
     val dictation: Boolean = true,
     val dictationEngine: DictationEngine = DictationEngine.Device,
+    /**
+     * Fork: the phone's voice chat (its Voice button, the earphones, Call Hermes) is a live call. Off, it's Talk: one
+     * request recorded until it's sent. Changing it starts nothing. The watch keeps its own.
+     */
+    val phoneLive: Boolean = false,
+    /**
+     * Fork: with Herald out of sight, a voice chat waiting for the next request keeps the earphones' button, and the
+     * microphone service, rather than letting go of them for music. Changing it starts nothing.
+     */
+    val backgroundEarphoneButton: Boolean = false,
     /** What tapping Send does while a reply is running; a long press on Send picks another for one message. */
     val runningSend: RunningSend = RunningSend.Steer,
     /**

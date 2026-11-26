@@ -1,4 +1,4 @@
-package dev.hermeskotlin.android.voice
+package dev.hermeskotlin.ui.voice
 
 import android.content.Context
 import android.content.Intent
@@ -6,8 +6,6 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
 import android.view.KeyEvent
-import dev.hermeskotlin.ui.voice.VoiceButton
-import dev.hermeskotlin.ui.voice.VoiceKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -25,7 +23,7 @@ internal fun voiceKey(keyCode: Int): VoiceKey? = when (keyCode) {
  * Fork: one key event to [VoiceButton]: true when the chat's voice took it. Known by its device and the time its
  * press went down, so the same press told again (down, up, repeats, or by both the activity and the session) is one.
  */
-internal fun voiceKeyEvent(event: KeyEvent, press: (VoiceKey, Boolean, Int, Long, Int) -> Boolean = VoiceButton::press): Boolean {
+fun voiceKeyEvent(event: KeyEvent, press: (VoiceKey, Boolean, Int, Long, Int) -> Boolean = VoiceButton::press): Boolean {
     val key = voiceKey(event.keyCode) ?: return false
     if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return false
     val downTime = event.downTime.takeIf { it > 0 } ?: event.eventTime
@@ -33,19 +31,30 @@ internal fun voiceKeyEvent(event: KeyEvent, press: (VoiceKey, Boolean, Int, Long
 }
 
 /**
- * Fork: holds the earphones' button while the chat's voice is on, so it still ends or sends with the app out of sight
- * or the screen off. With the app in front, the activity gets the key first ([voiceKeyEvent] from onKeyDown and onKeyUp).
- * Inactive otherwise, so Read aloud's session and music apps keep the button as before.
+ * Fork: holds the earphones' button while the chat's voice is on, so it still ends, sends or (Talk at Ready) records
+ * with the app out of sight or the screen off. With the app in front, the activity gets the key first ([voiceKeyEvent]
+ * from onKeyDown and onKeyUp). Inactive otherwise, so Read aloud's session and music apps keep the button as before.
+ *
+ * Out of sight, Android sends a press to the last app with a media session that played audio
+ * (https://developer.android.com/media/legacy/media-buttons): to Herald once it has just read a reply, but to music
+ * that has played since. Talk at Ready stays on out of sight only with Settings › Background earphone button
+ * ([VoiceController.onBackground]); off, the chat ends there and this session lets the button go.
  */
 class VoiceMediaSession(context: Context, scope: CoroutineScope) : AutoCloseable {
-    private val session = MediaSession(context.applicationContext, "Kyllene voice").apply {
-        setCallback(object : MediaSession.Callback() {
-            override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
-                val key = mediaButtonIntent.keyEvent() ?: return false
-                return voiceKeyEvent(key) || super.onMediaButtonEvent(mediaButtonIntent)
-            }
-        })
+    private val callback = object : MediaSession.Callback() {
+        override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
+            val key = mediaButtonIntent.keyEvent() ?: return false
+            return voiceKeyEvent(key) || super.onMediaButtonEvent(mediaButtonIntent)
+        }
     }
+
+    private val session = MediaSession(context.applicationContext, "Kyllene voice").apply { setCallback(callback) }
+
+    /** Holding the button now; for tests. */
+    internal val active: Boolean get() = session.isActive
+
+    /** A media button as Android hands it to the session; for tests. */
+    internal fun mediaButton(intent: Intent): Boolean = callback.onMediaButtonEvent(intent)
 
     private val following = scope.launch {
         VoiceButton.voiceOn.distinctUntilChanged().collect { on ->

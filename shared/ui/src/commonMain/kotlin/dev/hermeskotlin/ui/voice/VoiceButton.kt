@@ -16,8 +16,10 @@ enum class VoicePress {
     Start,
     /** The chat is listening and has heard you: send what you said now, as Send now does. */
     Send,
-    /** Any other voice on (a live call, a reply, the agent at work): end it, as End does. */
+    /** Any other voice on (a live call, a reply, the agent at work): end it, as End does. In Talk, End drops the request. */
     End,
+    /** Talk is Ready: record the next request, as its Mic button does. */
+    Talk,
     /** Not the chat's to take: the button goes where it would have gone. */
     None,
 }
@@ -25,6 +27,7 @@ enum class VoicePress {
 /** Fork: what a press does to [chat], where [canStart] says whether a chat on screen could start voice. */
 internal fun voicePress(chat: VoiceChatState, canStart: Boolean): VoicePress = when {
     chat.phase == VoicePhase.Off -> if (canStart) VoicePress.Start else VoicePress.None
+    chat.phase == VoicePhase.Ready -> VoicePress.Talk
     canSendNow(chat) -> VoicePress.Send
     else -> VoicePress.End
 }
@@ -35,6 +38,8 @@ internal fun voicePress(chat: VoiceChatState, canStart: Boolean): VoicePress = w
  * - With no voice on, a press starts it, as the chat's Voice button does.
  * - A live call ends.
  * - A chained chat sends what it heard once it's listening and has heard you; otherwise it ends.
+ * - Talk (Phone Live off): Ready records the next request; a recording that has heard you is sent, one that hasn't is
+ *   dropped; a request being written down, worked on or read is let go, and the chat is Ready again.
  *
  * A press is one press, however it's told: its down and up, repeats while held, or the same event from both the
  * activity and the media session. Each is known by its device and the time it went down, so the next press, which
@@ -86,7 +91,8 @@ object VoiceButton {
         when (action) {
             VoicePress.Start -> target.start()
             VoicePress.Send -> target.voice.sendNow()
-            VoicePress.End -> target.voice.stopChat()
+            VoicePress.End -> target.voice.end()
+            VoicePress.Talk -> target.voice.talk()
             VoicePress.None -> Unit
         }
         return true

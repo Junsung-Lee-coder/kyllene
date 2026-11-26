@@ -714,6 +714,24 @@ internal fun SettingsView(
                 if (hasVoice) Section(stringResource(Res.string.settings_section_voice)) {
                     CallTargetRow(settings.callTargets[gatewayUrl] ?: CallTarget(), botFaces, onChooseCallTarget)
                     Divider()
+                    // Fork: Talk or a live call, and the earphones' button out of sight. Only stored here: changing
+                    // either starts nothing.
+                    if (!isDesktop) {
+                        SwitchRow(
+                            title = stringResource(Res.string.settings_phone_live),
+                            detail = stringResource(Res.string.settings_phone_live_detail),
+                            checked = settings.phoneLive,
+                            onCheckedChange = { on -> onUpdate { it.copy(phoneLive = on) } },
+                        )
+                        Divider()
+                        SwitchRow(
+                            title = stringResource(Res.string.settings_background_button),
+                            detail = stringResource(Res.string.settings_background_button_detail),
+                            checked = settings.backgroundEarphoneButton,
+                            onCheckedChange = { on -> onUpdate { it.copy(backgroundEarphoneButton = on) } },
+                        )
+                        Divider()
+                    }
                     SwitchRow(
                         title = stringResource(Res.string.settings_dictation),
                         detail = stringResource(Res.string.settings_dictation_detail),

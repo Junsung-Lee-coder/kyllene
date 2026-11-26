@@ -85,4 +85,14 @@
     <string name="call_thinking">Thinking</string>
     <string name="call_working">Working: %1$s</string>
     <string name="call_speaking">Speaking</string>
+    <!-- Fork: Talk (Phone Live off) and the Phone Live switch. -->
+    <string name="voice_ready">Ready</string>
+    <string name="voice_talk">Talk</string>
+    <string name="voice_hint_ready">Tap the mic or press your earphones to talk</string>
+    <string name="voice_hint_tap_send">Tap send when you’re done</string>
+    <string name="voice_error_live_unavailable">Live voice isn't set up for this profile on your gateway. Turn Phone Live off to record requests instead.</string>
+    <string name="settings_phone_live">Phone Live</string>
+    <string name="settings_phone_live_detail">Off: a voice chat records one request until you send it. On: it starts a live call.</string>
+    <string name="settings_background_button">Background earphone button</string>
+    <string name="settings_background_button_detail">Once a voice chat is open, the earphone button keeps starting recordings when you leave the app, instead of controlling music. Its notification stays up meanwhile.</string>
 </resources>

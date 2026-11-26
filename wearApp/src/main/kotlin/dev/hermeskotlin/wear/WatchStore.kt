@@ -18,6 +18,9 @@ data class WatchChatChoice(val id: String?, val title: String?, val model: Strin
     val newChat: Boolean = false)
 
 /** What the watch remembers between launches: its chat, whether replies are read aloud, and the last reply (for the tile). */
+/** Fork: the watch's Talk live is off until it's turned on there; the phone's Phone Live is separate (requirements §3.1). */
+internal const val WATCH_LIVE_BY_DEFAULT = false
+
 class WatchStore(context: Context) {
 
     private val prefs = context.getSharedPreferences("herald_watch", Context.MODE_PRIVATE)
@@ -98,7 +101,7 @@ class WatchStore(context: Context) {
         }
     }
 
-    private val _live = MutableStateFlow(prefs.getBoolean(LIVE, true))
+    private val _live = MutableStateFlow(prefs.getBoolean(LIVE, WATCH_LIVE_BY_DEFAULT))
 
     /** Talk live, in a voice call, when the gateway can; off, the watch listens and sends what it heard. */
     val live: StateFlow<Boolean> = _live.asStateFlow()

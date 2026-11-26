@@ -66,6 +66,7 @@ import dev.hermeskotlin.core.voice.VoiceRecorder
 import dev.hermeskotlin.core.voice.DeviceDictation
 import dev.hermeskotlin.core.voice.DeviceLock
 import dev.hermeskotlin.ui.voice.VoiceController
+import dev.hermeskotlin.ui.voice.phoneVoiceMode
 import kotlinx.coroutines.CoroutineScope
 import dev.hermeskotlin.core.slash.SlashApi
 import dev.hermeskotlin.core.slash.SlashCatalog
@@ -740,8 +741,17 @@ class ChatViewModel(
     fun startVoiceChat(ringback: Boolean = false) {
         val chat = session.value ?: return
         val target = target ?: return
-        val pause = (settings.settings.value ?: AppSettings()).voicePause
-        voice.startChat(chat, target.gateway.gatewayUrl, target.profile, pause.millis, ringback = ringback)
+        val now = settings.settings.value ?: AppSettings()
+        // Fork: Phone Live picks Talk or a live call; the background earphone button is asked when Talk is Ready.
+        voice.startChat(
+            chat,
+            target.gateway.gatewayUrl,
+            target.profile,
+            now.voicePause.millis,
+            ringback = ringback,
+            mode = phoneVoiceMode(now.phoneLive),
+            readyAway = { (settings.settings.value ?: AppSettings()).backgroundEarphoneButton },
+        )
     }
 
     /** Starts dictating into the composer, or finishes the dictation in progress. */
@@ -1479,6 +1489,10 @@ class ChatViewModel(
     override fun sendVoiceNow() = voice.sendNow()
 
     override fun stopVoiceChat() = voice.stopChat()
+
+    override fun endVoiceChat() = voice.end()
+
+    override fun talkVoice() = voice.talk()
 
     override fun toggleVoiceMute() = voice.toggleMute()
 

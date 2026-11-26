@@ -228,6 +228,8 @@ internal fun callStatus(state: PhoneCallState, seconds: Long): CallStatus {
         VoicePhase.Transcribing -> CallStatus.Doing.Listening
         VoicePhase.Thinking -> if (voice.working != null) CallStatus.Doing.Working else CallStatus.Doing.Thinking
         VoicePhase.Speaking -> CallStatus.Doing.Speaking
+        // Fork: Talk is only started from a chat, never by a call; listed so the call reads as on.
+        VoicePhase.Ready -> CallStatus.Doing.Listening
     }
     return CallStatus.Live(length, doing, voice.working.takeIf { doing == CallStatus.Doing.Working })
 }

@@ -79,4 +79,14 @@
     <string name="call_thinking">Pensando</string>
     <string name="call_working">Trabajando: %1$s</string>
     <string name="call_speaking">Hablando</string>
+    <!-- Fork: Talk (Phone Live off) and the Phone Live switch. -->
+    <string name="voice_ready">Listo</string>
+    <string name="voice_talk">Hablar</string>
+    <string name="voice_hint_ready">Toca el micrófono o pulsa el botón de tus auriculares para hablar</string>
+    <string name="voice_hint_tap_send">Toca Enviar cuando termines</string>
+    <string name="voice_error_live_unavailable">La voz en directo no está configurada para este perfil en tu gateway. Desactiva Teléfono en directo para grabar solicitudes.</string>
+    <string name="settings_phone_live">Teléfono en directo</string>
+    <string name="settings_phone_live_detail">Desactivado: un chat de voz graba una solicitud hasta que la envíes. Activado: inicia una llamada en directo.</string>
+    <string name="settings_background_button">Botón de auriculares en segundo plano</string>
+    <string name="settings_background_button_detail">Con un chat de voz abierto, el botón de los auriculares sigue iniciando grabaciones al salir de la app, en lugar de controlar la música. Su notificación sigue visible mientras tanto.</string>
 </resources>

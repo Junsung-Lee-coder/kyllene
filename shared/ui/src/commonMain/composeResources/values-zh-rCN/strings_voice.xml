@@ -79,4 +79,14 @@
     <string name="call_thinking">正在思考</string>
     <string name="call_working">正在处理：%1$s</string>
     <string name="call_speaking">正在说话</string>
+    <!-- Fork: Talk (Phone Live off) and the Phone Live switch. -->
+    <string name="voice_ready">就绪</string>
+    <string name="voice_talk">说话</string>
+    <string name="voice_hint_ready">点按麦克风或按耳机按键开始说话</string>
+    <string name="voice_hint_tap_send">说完后点按发送</string>
+    <string name="voice_error_live_unavailable">你的网关上未为此配置文件设置实时语音。关闭“手机实时通话”即可改为录制请求。</string>
+    <string name="settings_phone_live">手机实时通话</string>
+    <string name="settings_phone_live_detail">关闭：语音聊天录制一条请求，直到你发送。开启：发起实时通话。</string>
+    <string name="settings_background_button">后台耳机按键</string>
+    <string name="settings_background_button_detail">语音聊天打开时，离开应用后耳机按键仍会开始录音，而不是控制音乐。期间其通知保持显示。</string>
 </resources>

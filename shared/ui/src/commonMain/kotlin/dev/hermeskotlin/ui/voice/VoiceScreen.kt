@@ -137,6 +137,8 @@ internal fun VoiceScreen(
     onType: () -> Unit,
     /** Sends what's been heard without waiting for the pause. */
     onSendNow: () -> Unit = {},
+    /** Fork: Talk is Ready: record the next request. */
+    onTalk: () -> Unit = {},
 ) {
     PlatformBackHandler(enabled = active, onBack = onMinimize)
     val glow = Theme[colors][accent].copy(alpha = 0.22f)
@@ -199,7 +201,10 @@ internal fun VoiceScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     // Mute on the left in a call and a chained chat alike; an empty slot keeps End in the middle.
-                    if (state.phase != VoicePhase.Connecting) {
+                    // Fork: Talk has no Mute, since nothing listens unless asked: its Mic records the next request at Ready.
+                    if (state.manual) {
+                        if (state.phase == VoicePhase.Ready) SideButton(Lucide.Mic, stringResource(Res.string.voice_talk), onTalk) else Spacer(Modifier.size(52.dp))
+                    } else if (state.phase != VoicePhase.Connecting) {
                         SideButton(Lucide.Mic.takeUnless { state.muted } ?: Lucide.MicOff, stringResource(Res.string.voice_mute), onMute, on = state.muted, toggle = true)
                     } else {
                         Spacer(Modifier.size(52.dp))

@@ -79,4 +79,14 @@
     <string name="call_thinking">Gondolkodik</string>
     <string name="call_working">Dolgozik: %1$s</string>
     <string name="call_speaking">Beszél</string>
+    <!-- Fork: Talk (Phone Live off) and the Phone Live switch. -->
+    <string name="voice_ready">Kész</string>
+    <string name="voice_talk">Beszéd</string>
+    <string name="voice_hint_ready">Koppints a mikrofonra, vagy nyomd meg a fülhallgató gombját a beszédhez</string>
+    <string name="voice_hint_tap_send">Koppints a Küldésre, ha végeztél</string>
+    <string name="voice_error_live_unavailable">Az élő hang nincs beállítva ehhez a profilhoz az átjáródon. Kapcsold ki a Telefonos élő módot, hogy kéréseket rögzíts helyette.</string>
+    <string name="settings_phone_live">Telefonos élő mód</string>
+    <string name="settings_phone_live_detail">Ki: a hangcsevegés egy kérést rögzít, amíg el nem küldöd. Be: élő hívást indít.</string>
+    <string name="settings_background_button">Fülhallgató gombja a háttérben</string>
+    <string name="settings_background_button_detail">Nyitott hangcsevegés mellett a fülhallgató gombja az alkalmazásból kilépve is felvételt indít a zene vezérlése helyett. Közben az értesítése látható marad.</string>
 </resources>

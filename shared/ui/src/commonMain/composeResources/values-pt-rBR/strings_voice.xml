@@ -79,4 +79,14 @@
     <string name="call_thinking">Pensando</string>
     <string name="call_working">Trabalhando: %1$s</string>
     <string name="call_speaking">Falando</string>
+    <!-- Fork: Talk (Phone Live off) and the Phone Live switch. -->
+    <string name="voice_ready">Pronto</string>
+    <string name="voice_talk">Falar</string>
+    <string name="voice_hint_ready">Toque no microfone ou aperte o botão dos fones para falar</string>
+    <string name="voice_hint_tap_send">Toque em Enviar quando terminar</string>
+    <string name="voice_error_live_unavailable">A voz ao vivo não está configurada para este perfil no seu gateway. Desative Telefone ao vivo para gravar pedidos.</string>
+    <string name="settings_phone_live">Telefone ao vivo</string>
+    <string name="settings_phone_live_detail">Desativado: uma conversa por voz grava um pedido até você enviá-lo. Ativado: inicia uma chamada ao vivo.</string>
+    <string name="settings_background_button">Botão dos fones em segundo plano</string>
+    <string name="settings_background_button_detail">Com uma conversa por voz aberta, o botão dos fones continua iniciando gravações quando você sai do app, em vez de controlar a música. A notificação fica visível enquanto isso.</string>
 </resources>

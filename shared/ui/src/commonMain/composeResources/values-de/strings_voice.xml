@@ -79,4 +79,14 @@
     <string name="call_thinking">Denkt nach</string>
     <string name="call_working">Arbeitet: %1$s</string>
     <string name="call_speaking">Spricht</string>
+    <!-- Fork: Talk (Phone Live off) and the Phone Live switch. -->
+    <string name="voice_ready">Bereit</string>
+    <string name="voice_talk">Sprechen</string>
+    <string name="voice_hint_ready">Tippe aufs Mikro oder drücke die Kopfhörertaste, um zu sprechen</string>
+    <string name="voice_hint_tap_send">Tippe auf Senden, wenn du fertig bist</string>
+    <string name="voice_error_live_unavailable">Live-Sprache ist für dieses Profil auf deinem Gateway nicht eingerichtet. Schalte Telefon live aus, um stattdessen Anfragen aufzunehmen.</string>
+    <string name="settings_phone_live">Telefon live</string>
+    <string name="settings_phone_live_detail">Aus: Ein Sprachchat nimmt eine Anfrage auf, bis du sie sendest. An: Er startet einen Live-Anruf.</string>
+    <string name="settings_background_button">Kopfhörertaste im Hintergrund</string>
+    <string name="settings_background_button_detail">Ist ein Sprachchat offen, startet die Kopfhörertaste auch nach dem Verlassen der App Aufnahmen, statt Musik zu steuern. Die Benachrichtigung bleibt so lange sichtbar.</string>
 </resources>

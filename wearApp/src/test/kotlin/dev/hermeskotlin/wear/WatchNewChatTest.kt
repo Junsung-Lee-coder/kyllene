@@ -15,6 +15,11 @@ class WatchNewChatTest {
     }
 
     @Test
+    fun talkLiveStartsOff() {
+        assertFalse(WATCH_LIVE_BY_DEFAULT)
+    }
+
+    @Test
     fun theChoiceDefaultsToNothingChosen() {
         assertFalse(WatchChatChoice(null, null).newChat)
     }

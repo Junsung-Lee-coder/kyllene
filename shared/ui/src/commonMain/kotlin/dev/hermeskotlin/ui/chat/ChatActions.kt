@@ -125,6 +125,12 @@ interface ChatActions {
 
     fun stopVoiceChat()
 
+    /** Fork: End on the voice panel: in Talk it drops the request under way, and closes the chat once Ready. */
+    fun endVoiceChat() = stopVoiceChat()
+
+    /** Fork: Talk is Ready: record the next request. */
+    fun talkVoice() {}
+
     /** Turns the microphone off or on in a GPT-Live call. */
     fun toggleVoiceMute() {}
 

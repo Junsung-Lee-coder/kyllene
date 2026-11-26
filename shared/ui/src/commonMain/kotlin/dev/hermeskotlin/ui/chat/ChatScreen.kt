@@ -526,6 +526,8 @@ fun ChatScreen(
         viewModel.markLooked()
     }
     LifecycleEventEffect(Lifecycle.Event.ON_START) {
+        // Fork: Talk's Ready no longer depends on the background earphone button.
+        viewModel.voice.onForeground()
         viewModel.onScreen(true)
         // The way back in sight is the only moment a chat that missed live events asks again: a socket that
         // never reported a drop leaves the connection Connected, so no attach catches up on its own.
@@ -1298,12 +1300,13 @@ internal fun ChatView(
                 onMinimize = { voiceFolded = true },
                 onSkip = actions::skipSpeech,
                 onMute = actions::toggleVoiceMute,
-                onEnd = actions::stopVoiceChat,
+                onEnd = actions::endVoiceChat,
                 onType = {
                     typeAfterVoice = true
                     actions.stopVoiceChat()
                 },
                 onSendNow = actions::sendVoiceNow,
+                onTalk = actions::talkVoice,
             )
         }
         // Files dragged over the chat: it says where they go before they're let go, as a desktop app does.
@@ -1433,9 +1436,10 @@ private fun ColumnScope.Dock(
                 state = voiceChat,
                 onSkip = actions::skipSpeech,
                 onMute = actions::toggleVoiceMute,
-                onEnd = actions::stopVoiceChat,
+                onEnd = actions::endVoiceChat,
                 onExpand = onExpandVoice,
                 onSendNow = actions::sendVoiceNow,
+                onTalk = actions::talkVoice,
             )
         }
     } else {
