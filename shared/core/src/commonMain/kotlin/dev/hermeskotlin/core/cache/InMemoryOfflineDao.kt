@@ -81,6 +81,29 @@ class InMemoryOfflineDao : OfflineDao {
         messages.removeAll { it.gateway == gateway }
         Unit
     }
+
+    override suspend fun moveGatewayLists(from: String, to: String) = mutex.withLock {
+        lists.update { if (it.gateway == from) SavedListRow(to, it.profile, it.filter, it.id, it.position, it.savedAt, it.row) else it }
+    }
+
+    override suspend fun moveGatewayTranscripts(from: String, to: String) = mutex.withLock {
+        transcripts.update { if (it.gateway == from) SavedTranscriptRow(to, it.profile, it.sessionId, it.rowsSessionId, it.savedAt) else it }
+    }
+
+    override suspend fun moveGatewayMessages(from: String, to: String) = mutex.withLock {
+        messages.update { if (it.gateway == from) SavedMessageRow(to, it.profile, it.sessionId, it.position, it.row) else it }
+    }
+
+    override suspend fun transcriptGateways() = mutex.withLock { transcripts.map { it.gateway }.distinct() }
+
+    private fun <T> MutableList<T>.update(change: (T) -> T) {
+        for (index in indices) this[index] = change(this[index])
+    }
+
+    /** Every gateway key that holds a saved chat or list, for tests to see where copies went. */
+    suspend fun gatewayKeys(): Set<String> = mutex.withLock {
+        (lists.map { it.gateway } + transcripts.map { it.gateway } + messages.map { it.gateway }).toSet()
+    }
 }
 
 /** Keeps text as it is: for tests and previews only. */

@@ -2178,10 +2178,8 @@ class ChatSession(
             else -> {
                 val gone = result is ApiResult.Failed && result.status == HTTP_NOT_FOUND
                 if (gone) {
-                    // A write still under way would bring it back.
-                    saveJob?.cancel()
+                    // Fork: the device keeps its copy of a chat the gateway no longer has (RetainedCopies).
                     savedCopyKey = null
-                    cache?.forgetChat(gateway, profile, id)
                     // The saved copy is of a chat that no longer exists.
                     if (_state.value.savedCopyAt != null) {
                         rows = emptyList()
@@ -2211,7 +2209,13 @@ class ChatSession(
         if (key == savedCopyKey) return
         savedCopyKey = key
         saveJob?.cancel()
-        saveJob = scope.launch { cache.saveTranscript(gateway, profile, id, saved, savedSessionId) }
+        saveJob = scope.launch {
+            // Fork: a copy that couldn't be written is said, with the chat's other errors; what was saved stays.
+            if (cache.saveTranscript(gateway, profile, id, saved, savedSessionId) == null) {
+                if (savedCopyKey == key) savedCopyKey = null
+                _state.update { it.copy(error = SAVE_FAILED) }
+            }
+        }
     }
 
     /**
@@ -2279,6 +2283,8 @@ class ChatSession(
                 val startedAt = turnStartedAt
                 val shownBefore = historyToMessages(rows, rowsSessionId, startedAt).mapTo(HashSet()) { it.key }
                 rows = fresh + rows
+                // Fork: earlier pages read are kept on the device too.
+                if (fresh.isNotEmpty()) saveCopy(id, rows, rowsSessionId)
                 val flagged = risks?.all().orEmpty()
                 _state.update { state ->
                     // The stored rows lead the list; what follows them (the live turn, local notes) stays as it is.
@@ -2542,6 +2548,9 @@ class ChatSession(
     private fun connectedClient(): JsonRpcClient? = (connection.state.value as? ConnectionState.Connected)?.client
 
     private companion object {
+        /** Fork: a copy of the chat that couldn't be written to the device; what was saved before stays. */
+        const val SAVE_FAILED = "Couldn't save this chat on this device. What was saved before is still there."
+
         /** A message key made from a stored row (`historyToMessages`): `row-<id>`, or `row-<id>-<n>` for one of its events. */
         val ROW_KEY = Regex("row-(\\d+)(?:-\\d+)?")
 

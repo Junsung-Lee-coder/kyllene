@@ -205,7 +205,22 @@ class SessionsViewModelTest {
     }
 
     @Test
-    fun aListReadIsSavedAndReplacesTheSavedCopy() = runTest(dispatcher) {
+    fun aListThatCantBeSavedOnTheDeviceIsSaid() = runTest(dispatcher) {
+        val dao = InMemoryOfflineDao()
+        val failing = object : dev.hermeskotlin.core.cache.OfflineDao by dao {
+            override suspend fun replaceList(gateway: String, profile: String, filter: String, rows: List<dev.hermeskotlin.core.cache.SavedListRow>) =
+                throw IllegalStateException("disk full")
+        }
+        val vm = viewModel(cache = OfflineCache(failing, PlainSealer, EmptyCoroutineContext) { 7_000L })
+
+        vm.bind(gateway)
+
+        assertEquals(listOf("a", "b"), vm.state.value.sessions.map { it.id })
+        assertEquals(Said.Verbatim("Couldn't save the chat list on this device."), vm.state.value.message)
+    }
+
+    @Test
+    fun aListReadIsSavedAheadOfTheChatsItNoLongerHas() = runTest(dispatcher) {
         val cache = OfflineCache(InMemoryOfflineDao(), PlainSealer, EmptyCoroutineContext) { 7_000L }
         cache.saveList(gateway.gatewayUrl, null, SessionListFilter.Recent, listOf(SessionSummary("old")))
         val vm = viewModel(cache = cache)
@@ -214,7 +229,8 @@ class SessionsViewModelTest {
 
         assertEquals(listOf("a", "b"), vm.state.value.sessions.map { it.id })
         assertEquals(null, vm.state.value.savedCopyAt)
-        assertEquals(listOf("a", "b"), cache.savedList(gateway.gatewayUrl, null, SessionListFilter.Recent)?.sessions?.map { it.id })
+        // Fork: a chat the gateway no longer lists stays in the saved list, after the ones it does (RetainedCopies).
+        assertEquals(listOf("a", "b", "old"), cache.savedList(gateway.gatewayUrl, null, SessionListFilter.Recent)?.sessions?.map { it.id })
     }
 
     @Test

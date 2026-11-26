@@ -795,7 +795,8 @@ class SessionsViewModel(
             // Keep however many rows are already showing so a background refetch doesn't truncate the list.
             val limit = _state.value.sessions.size.coerceIn(SessionsApi.PAGE_SIZE, 100)
             val result = api.list(url, limit = limit, filter = filter, profile = profile)
-            if (result is ApiResult.Success) cache?.saveList(url, profile, filter, result.value.sessions)
+            // Fork: a list that couldn't be saved on the device is said, the way a failed refresh is; what was saved stays.
+            val unsaved = result is ApiResult.Success && cache != null && cache.saveList(url, profile, filter, result.value.sessions) == null
             if (result is ApiResult.Success && filter == SessionListFilter.Recent) {
                 threadsRepo.noteRows(url, profile, result.value.sessions)
                 // Threads come over the socket; another device may have changed them.
@@ -824,6 +825,7 @@ class SessionsViewModel(
                     )
                 }
             }
+            if (unsaved) _state.update { it.copy(message = LIST_NOT_SAVED.verbatim()) }
             if (result is ApiResult.Success) _listReads.tryEmit(ListRead.Done(filter))
         }
         _listReads.tryEmit(ListRead.Asked(url, profile, filter))
@@ -889,6 +891,9 @@ class SessionsViewModel(
     }
 
     private companion object {
+        /** Fork: the chat list couldn't be saved on this device; what was saved before stays. */
+        const val LIST_NOT_SAVED = "Couldn't save the chat list on this device."
+
         val REFRESH_EVENTS = setOf("sessions.changed", "session.title")
         const val MIN_QUERY = 2
 

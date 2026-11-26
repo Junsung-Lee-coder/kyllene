@@ -132,6 +132,27 @@ interface OfflineDao {
         clearGatewayTranscripts(gateway)
         clearGatewayMessages(gateway)
     }
+
+    // Fork: moving a gateway's copies to another key (see OfflineCache.detachGateway). No new table or column.
+    @Query("UPDATE saved_list_row SET gateway = :to WHERE gateway = :from")
+    suspend fun moveGatewayLists(from: String, to: String)
+
+    @Query("UPDATE saved_transcript SET gateway = :to WHERE gateway = :from")
+    suspend fun moveGatewayTranscripts(from: String, to: String)
+
+    @Query("UPDATE saved_message SET gateway = :to WHERE gateway = :from")
+    suspend fun moveGatewayMessages(from: String, to: String)
+
+    /** Every gateway key a saved chat is under, detached ones too. */
+    @Query("SELECT DISTINCT gateway FROM saved_transcript")
+    suspend fun transcriptGateways(): List<String>
+
+    @Transaction
+    suspend fun moveGateway(from: String, to: String) {
+        moveGatewayLists(from, to)
+        moveGatewayTranscripts(from, to)
+        moveGatewayMessages(from, to)
+    }
 }
 
 /** The copy of chats kept on the device, so they open without the gateway. */

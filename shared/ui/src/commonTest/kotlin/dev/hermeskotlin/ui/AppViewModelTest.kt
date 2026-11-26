@@ -11,6 +11,7 @@ import dev.hermeskotlin.ui.inbox.ReportChat
 import dev.hermeskotlin.core.cache.InMemoryOfflineDao
 import dev.hermeskotlin.core.cache.OfflineCache
 import dev.hermeskotlin.core.cache.PlainSealer
+import dev.hermeskotlin.core.custom.RetainedCopies
 import kotlin.coroutines.EmptyCoroutineContext
 import dev.hermeskotlin.core.chat.AppLink
 import dev.hermeskotlin.core.chat.DraftStart
@@ -101,7 +102,8 @@ class AppViewModelTest {
     private val gateways = GatewayRepository(store)
     private val lastChats = LastChatStore(store)
     private val access = AccessTokens(store)
-    private val cache = OfflineCache(InMemoryOfflineDao(), PlainSealer, EmptyCoroutineContext) { 0L }
+    private val offlineDao = InMemoryOfflineDao()
+    private val cache = OfflineCache(offlineDao, PlainSealer, EmptyCoroutineContext) { 0L }
 
     // The connection waits on its ticket for good (a retry loop would keep the test clock busy, so a missed
     // route would hang instead of time out); every other call fails, and sign-out still wipes cookies.
@@ -787,7 +789,7 @@ class AppViewModelTest {
     }
 
     @Test
-    fun removingAGatewayForgetsTheChatsSavedFromIt() = runTest {
+    fun removingAGatewayPutsAwayTheChatsSavedFromIt() = runTest {
         gateways.save(home)
         signedIn(home)
         cache.saveList(home.gatewayUrl, null, SessionListFilter.Recent, listOf(SessionSummary("a")))
@@ -798,10 +800,13 @@ class AppViewModelTest {
         vm.route.first { it is Route.Connect }
 
         assertNull(cache.savedList(home.gatewayUrl, null, SessionListFilter.Recent))
+        // Fork: kept on the device, under a key no gateway reads (OfflineCache.detachGateway).
+        val keys = offlineDao.gatewayKeys()
+        assertTrue(keys.isNotEmpty() && keys.all { RetainedCopies.isDetached(it, home.gatewayUrl.value) }, "$keys")
     }
 
     @Test
-    fun signingOutForgetsTheChatsSavedFromThatGateway() = runTest {
+    fun signingOutPutsAwayTheChatsSavedFromThatGateway() = runTest {
         gateways.save(home)
         signedIn(home)
         val other = SavedGateway("https://other.example.ts.net")
@@ -815,6 +820,9 @@ class AppViewModelTest {
 
         assertNull(cache.savedList(home.gatewayUrl, null, SessionListFilter.Recent))
         assertNotNull(cache.savedList(other.gatewayUrl, null, SessionListFilter.Recent))
+        // Fork: kept on the device, under a key no gateway reads (OfflineCache.detachGateway).
+        val keys = offlineDao.gatewayKeys() - other.gatewayUrl.value
+        assertTrue(keys.isNotEmpty() && keys.all { RetainedCopies.isDetached(it, home.gatewayUrl.value) }, "$keys")
     }
 
     @Test

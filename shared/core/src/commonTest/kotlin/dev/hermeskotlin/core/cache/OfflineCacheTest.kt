@@ -36,68 +36,6 @@ class OfflineCacheTest {
     }
 
     @Test
-    fun aNewerListReplacesTheOldOneWhole() = runTest {
-        cache.saveList(home, null, SessionListFilter.Recent, listOf(SessionSummary("a"), SessionSummary("b")))
-        clock = 2_000L
-        cache.saveList(home, null, SessionListFilter.Recent, listOf(SessionSummary("c")))
-
-        val saved = assertNotNull(cache.savedList(home, null, SessionListFilter.Recent))
-        assertEquals(listOf("c"), saved.sessions.map { it.id })
-        assertEquals(2_000L, saved.savedAt)
-    }
-
-    @Test
-    fun aTranscriptKeepsItsNewestRowsFromATurnsStart() = runTest {
-        // Two rows per turn, more than are kept: the oldest go, and what's left starts on a prompt.
-        val rows = (1L..(OfflineCache.MAX_TRANSCRIPT_ROWS + 3L)).map { message(it, if (it % 2 == 1L) "user" else "assistant") }
-        cache.saveTranscript(home, null, "s1", rows, rowsSessionId = "s1")
-
-        val saved = assertNotNull(cache.savedTranscript(home, null, "s1"))
-        assertEquals("user", saved.rows.first().role)
-        assertEquals(rows.last(), saved.rows.last())
-        assertEquals(OfflineCache.MAX_TRANSCRIPT_ROWS - 1, saved.rows.size)
-        assertEquals("s1", saved.rowsSessionId)
-    }
-
-    @Test
-    fun aRowTooBigToReadBackIsKeptWithoutItsText() = runTest {
-        val huge = "x".repeat(OfflineCache.MAX_ROW_BYTES + 1)
-        val rows = listOf(message(1, "user"), message(2, "tool", huge), message(3, "assistant"))
-        cache.saveTranscript(home, null, "s1", rows, rowsSessionId = "s1")
-
-        val saved = assertNotNull(cache.savedTranscript(home, null, "s1"))
-        assertEquals(listOf(1L, 2L, 3L), saved.rows.map { it.id })
-        assertEquals(OfflineCache.TOO_BIG_NOTE, saved.rows[1].text)
-    }
-
-    @Test
-    fun oversizedReasoningProjectionsAreOmittedWithoutDroppingTheTurn() = runTest {
-        val huge = "x".repeat(OfflineCache.MAX_ROW_BYTES + 1)
-        val row = message(2, "assistant").copy(displayReasoning = huge, displayCommentary = listOf(huge))
-        cache.saveTranscript(home, null, "s1", listOf(message(1, "user"), row), rowsSessionId = "s1")
-        val saved = assertNotNull(cache.savedTranscript(home, null, "s1"))
-        assertEquals(listOf(1L, 2L), saved.rows.map { it.id })
-        assertEquals(OfflineCache.TOO_BIG_NOTE, saved.rows[1].text)
-        assertEquals("", saved.rows[1].reasoningText)
-    }
-
-    @Test
-    fun aRowTooBigEvenWithoutItsTextLeavesOnlyTheTurnsAfterIt() = runTest {
-        val hugeCall = JsonPrimitive("x".repeat(OfflineCache.MAX_ROW_BYTES + 1))
-        val rows = listOf(
-            message(1, "user"),
-            message(2, "assistant").copy(toolCalls = hugeCall),
-            message(3, "assistant"),
-            message(4, "user"),
-            message(5, "assistant"),
-        )
-        cache.saveTranscript(home, null, "s1", rows, rowsSessionId = "s1")
-
-        val saved = assertNotNull(cache.savedTranscript(home, null, "s1"))
-        assertEquals(listOf(4L, 5L), saved.rows.map { it.id })
-    }
-
-    @Test
     fun deletingABotForgetsOnlyItsProfilesChats() = runTest {
         cache.saveTranscript(home, "coder", "a", listOf(message(1, "user")), rowsSessionId = "a")
         cache.saveList(home, "coder", SessionListFilter.Recent, listOf(SessionSummary("a")))

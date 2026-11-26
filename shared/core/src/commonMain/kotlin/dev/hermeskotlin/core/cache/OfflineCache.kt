@@ -1,6 +1,6 @@
 package dev.hermeskotlin.core.cache
 
-import dev.hermeskotlin.core.chat.fromFirstTurn
+import dev.hermeskotlin.core.custom.RetainedCopies
 import dev.hermeskotlin.core.gateway.GatewayUrl
 import dev.hermeskotlin.core.sessions.SessionListFilter
 import dev.hermeskotlin.core.sessions.SessionMessage
@@ -24,10 +24,10 @@ data class SavedTranscript(
 )
 
 /**
- * The device's copy of the chat list and of the newest rows of recently read chats, so they still show while the
- * gateway can't be reached. The gateway's answer always replaces what's saved; nothing here is ever sent back.
- * Rows are sealed with a device key before they're written. A failure to read or write only means no saved copy:
- * the cache never stands in the way of the gateway.
+ * The device's copy of the chat list and of the chats read, so they still show while the gateway can't be reached.
+ * What the gateway sends is added to what's saved ([RetainedCopies]); nothing here is ever sent back. Rows are sealed
+ * with a device key before they're written. A failed read means no saved copy, and a failed write returns null and
+ * leaves the saved copy as it was: the cache never stands in the way of the gateway.
  */
 class OfflineCache(
     private val dao: OfflineDao,
@@ -44,9 +44,13 @@ class OfflineCache(
         SavedList(sessions, rows.minOf { it.savedAt })
     }
 
+    /** Saves [sessions] in their order, followed by the saved chats they don't have, which stay. Null when it failed. */
     suspend fun saveList(gateway: GatewayUrl, profile: String?, filter: SessionListFilter, sessions: List<SessionSummary>) = quietly {
         val at = now()
-        val rows = sessions.take(MAX_LIST_ROWS).distinctBy { it.id }.mapIndexed { index, session ->
+        val saved = dao.list(gateway.value, profile.key, filter.name).map { open(it.row, SessionSummary.serializer()) }
+        // Rows that no longer open (the key was reset) can't be kept readable: the new list stands alone then.
+        val kept = if (saved.any { it == null }) emptyList() else saved.filterNotNull()
+        val rows = RetainedCopies.mergeList(kept, sessions).mapIndexed { index, session ->
             SavedListRow(gateway.value, profile.key, filter.name, session.id, index, at, seal(session, SessionSummary.serializer()))
         }
         dao.replaceList(gateway.value, profile.key, filter.name, rows)
@@ -54,16 +58,23 @@ class OfflineCache(
 
     suspend fun savedTranscript(gateway: GatewayUrl, profile: String?, sessionId: String): SavedTranscript? = quietly {
         val transcript = dao.transcript(gateway.value, profile.key, sessionId) ?: return@quietly null
-        val rows = dao.messages(gateway.value, profile.key, sessionId).map {
-            open(it.row, SessionMessage.serializer()) ?: return@quietly null
-        }
+        val rows = savedRows(gateway, profile, sessionId) ?: return@quietly null
         if (rows.isEmpty()) return@quietly null
         SavedTranscript(rows, transcript.rowsSessionId, transcript.savedAt)
     }
 
+    /** Every saved row of [sessionId], split rows put back together; null when one doesn't open. */
+    private suspend fun savedRows(gateway: GatewayUrl, profile: String?, sessionId: String): List<SessionMessage>? {
+        val texts = dao.messages(gateway.value, profile.key, sessionId).map { sealer.open(it.row) ?: return null }
+        return RetainedCopies.join(texts)?.map { text ->
+            runCatching { json.decodeFromString(SessionMessage.serializer(), text) }.getOrNull() ?: return null
+        }
+    }
+
     /**
-     * Saves the newest [MAX_TRANSCRIPT_ROWS] of [rows], from a turn's start, in place of what [sessionId] had saved.
-     * Other chats' copies stay however many there are: only the person deleting them drops them.
+     * Adds [rows] to what [sessionId] has saved: rows read again replace their saved copy, and the rest stay
+     * ([RetainedCopies.mergeRows]). A row too big for one database row is kept whole, in pieces. Null when it failed;
+     * the saved copy is then as it was.
      */
     suspend fun saveTranscript(
         gateway: GatewayUrl,
@@ -72,19 +83,12 @@ class OfflineCache(
         rows: List<SessionMessage>,
         rowsSessionId: String?,
     ) = quietly {
-        val newest = if (rows.size > MAX_TRANSCRIPT_ROWS) rows.takeLast(MAX_TRANSCRIPT_ROWS).fromFirstTurn() else rows
-        val sealed = newest.map { row ->
-            seal(row, SessionMessage.serializer()).takeIf { it.size <= MAX_ROW_BYTES }
-                // Too big to read back (a huge tool output): kept without its text, which says so.
-                ?: seal(row.copy(
-                    content = JsonPrimitive(TOO_BIG_NOTE), displayContent = null, reasoning = null,
-                    displayReasoning = null, displayCommentary = null,
-                ), SessionMessage.serializer())
-        }
-        // Still too big (huge tool-call arguments): only the turns after it are kept.
-        val tooBig = sealed.indexOfLast { it.size > MAX_ROW_BYTES }
-        val kept = if (tooBig < 0) newest else newest.drop(tooBig + 1).fromFirstTurn()
-        if (kept.isEmpty()) return@quietly dao.forgetTranscript(gateway.value, profile.key, sessionId)
+        // Rows that no longer open (the key was reset) can't be kept readable: the new rows stand alone then.
+        val saved = savedRows(gateway, profile, sessionId).orEmpty()
+        val merged = RetainedCopies.mergeRows(saved, rows)
+        if (merged.isEmpty()) return@quietly Unit
+        val texts = merged.flatMap { row -> RetainedCopies.split(json.encodeToString(SessionMessage.serializer(), row), MAX_PIECE_CHARS) }
+        val sealed = texts.map { text -> sealer.seal(text).also { check(it.size <= MAX_ROW_BYTES) { "A saved row is too big." } } }
         val transcript = SavedTranscriptRow(
             gateway = gateway.value,
             profile = profile.key,
@@ -92,8 +96,7 @@ class OfflineCache(
             rowsSessionId = rowsSessionId,
             savedAt = now(),
         )
-        val saved = sealed.takeLast(kept.size).mapIndexed { index, row -> SavedMessageRow(gateway.value, profile.key, sessionId, index, row) }
-        dao.replaceTranscript(transcript, saved)
+        dao.replaceTranscript(transcript, sealed.mapIndexed { index, row -> SavedMessageRow(gateway.value, profile.key, sessionId, index, row) })
     }
 
     /** Drops [sessionId] from the device: it was deleted, or the gateway no longer has it. */
@@ -102,8 +105,14 @@ class OfflineCache(
         dao.removeListRow(gateway.value, profile.key, sessionId)
     }
 
-    /** Drops everything saved from [gateway], e.g. on signing out of it. */
+    /** Drops everything saved from [gateway]. Signing out keeps the copies ([detachGateway]); this is for deleting them. */
     suspend fun forgetGateway(gateway: GatewayUrl) = quietly { dao.forgetGateway(gateway.value) }
+
+    /**
+     * Signing out of [gateway] or removing it: its copies stay on the device under a key no gateway reads
+     * ([RetainedCopies.detachedKey]), so whoever signs in next, to it or another, doesn't see them. Null when it failed.
+     */
+    suspend fun detachGateway(gateway: GatewayUrl) = quietly { dao.moveGateway(gateway.value, RetainedCopies.detachedKey(gateway.value, now())) }
 
     /** Drops everything saved from [profile] on [gateway]: it was deleted (a bot, with its chats). */
     suspend fun forgetProfile(gateway: GatewayUrl, profile: String) = quietly { dao.forgetProfile(gateway.value, profile) }
@@ -125,17 +134,11 @@ class OfflineCache(
     private val String?.key: String get() = this ?: ""
 
     companion object {
-        /** Rows kept per chat: a few pages, enough to read back over the last turns. */
-        const val MAX_TRANSCRIPT_ROWS = 200
-
-        /** Rows kept per list: what one refresh of the list reads at most. */
-        const val MAX_LIST_ROWS = 100
-
-        /** Android reads a database row through a 2 MB window; a sealed row over this isn't saved. */
+        /** Android reads a database row through a 2 MB window; no sealed row is written over this. */
         const val MAX_ROW_BYTES = 1_000_000
 
-        /** What a row too big to keep shows instead of its text. */
-        const val TOO_BIG_NOTE = "(Too long to keep on this device. Hermes has the full text.)"
+        /** A piece of a row too big for one database row: at most 3 UTF-8 bytes each, well under [MAX_ROW_BYTES]. */
+        const val MAX_PIECE_CHARS = 200_000
 
         private val json = Json { ignoreUnknownKeys = true }
     }

@@ -363,8 +363,9 @@ class AppViewModel(
     fun removeGateway(gateway: SavedGateway) {
         if (gateway.url == currentGateway()?.url) cancelPendingCall()
         viewModelScope.launch {
-            // First, so the chats go even if what follows waits on an unreachable gateway and the app is closed.
-            cache?.forgetGateway(gateway.gatewayUrl)
+            // First, so the chats are put away even if what follows waits on an unreachable gateway and the app is closed.
+            // Fork: put away, not deleted (OfflineCache.detachGateway): no one signing in next sees them.
+            cache?.detachGateway(gateway.gatewayUrl)
             val wasCurrent = currentGateway()?.url == gateway.url || gateways.current()?.url == gateway.url
             if (wasCurrent) {
                 // While the socket is still up: the gateway forgets this phone's push identity.
@@ -374,7 +375,7 @@ class AppViewModel(
             }
             auth.signOut(gateway.gatewayUrl)
             // Again: a list read that was under way may have saved itself since.
-            cache?.forgetGateway(gateway.gatewayUrl)
+            cache?.detachGateway(gateway.gatewayUrl)
             gateways.remove(gateway.url)
             // The saved alias goes with the gateway: no connection made with it is reused.
             if (gateway.clientCertAlias != null) certs.changed(gateway.gatewayUrl.host)
@@ -593,15 +594,16 @@ class AppViewModel(
         cancelPendingCall()
         val gateway = currentGateway() ?: return
         viewModelScope.launch {
-            // First, so the chats go even if what follows waits on an unreachable gateway and the app is closed.
-            cache?.forgetGateway(gateway.gatewayUrl)
+            // First, so the chats are put away even if what follows waits on an unreachable gateway and the app is closed.
+            // Fork: put away, not deleted (OfflineCache.detachGateway): no one signing in next sees them.
+            cache?.detachGateway(gateway.gatewayUrl)
             // While the socket is still up: the gateway forgets this phone's push identity.
             push.forget()
             connection.stop()
             host.close()
             auth.signOut(gateway.gatewayUrl)
             // Again: a list read that was under way may have saved itself since.
-            cache?.forgetGateway(gateway.gatewayUrl)
+            cache?.detachGateway(gateway.gatewayUrl)
             sessionsChanged.update { it + 1 }
             _route.value = Route.SignIn(gateway)
         }

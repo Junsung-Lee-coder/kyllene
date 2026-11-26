@@ -1786,7 +1786,7 @@ class ChatSessionTest {
     }
 
     @Test
-    fun aChatTheGatewayNoLongerHasIsDroppedFromTheDevice() = runTest {
+    fun aChatTheGatewayNoLongerHasStaysOnTheDeviceButIsntShown() = runTest {
         val cache = OfflineCache(InMemoryOfflineDao(), PlainSealer, EmptyCoroutineContext) { 5_000L }
         cache.saveTranscript(url, null, "stored-1", listOf(SessionMessage(id = 1, role = "user", content = JsonPrimitive("old"))), "stored-1")
         historyMissing = true
@@ -1797,7 +1797,8 @@ class ChatSessionTest {
         val gone = chat.state.first { it.historyError != null }
         assertTrue(gone.messages.isEmpty())
         assertNull(gone.savedCopyAt)
-        assertNull(cache.savedTranscript(url, null, "stored-1"))
+        // Fork: the device's copy stays (RetainedCopies).
+        assertEquals(listOf("old"), cache.savedTranscript(url, null, "stored-1")?.rows?.map { it.text })
     }
 
     @Test
